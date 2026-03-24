@@ -33,9 +33,53 @@
         <div class="actions">
           <button type="submit" class="btn btn-success">Guardar Ruta</button>
           <button type="button" class="btn btn-secondary" onclick="limpiarFormRuta()">Limpiar</button>
+          <button type="button" class="btn btn-primary" onclick="mostrarRutaEnMapa()">Ver Ruta en Mapa</button>
+          <a id="abrirMapsRuta" class="btn btn-secondary" href="#" target="_blank" rel="noopener noreferrer">Abrir en Google Maps</a>
         </div>
       </form>
       <div id="msgRuta"></div>
+    </div>
+  </div>
+
+  <div class="card rutas-map-card">
+    <div class="card-header">Mapa de Ruta (Google Maps)</div>
+    <div class="card-body">
+      <div class="rutas-map-topbar">
+        <span class="ruta-chip best">Mas rapida (azul)</span>
+        <span class="ruta-chip">Alternativas (gris)</span>
+        <span class="ruta-chip muted">Haz clic para seleccionar</span>
+        <div class="ruta-style-selector">
+          <label for="mapStyleRuta">Vista:</label>
+          <select id="mapStyleRuta" onchange="aplicarVisualizacionMapaRuta()">
+            <option value="google" selected>Normal</option>
+            <option value="satelite">Satelital</option>
+            <option value="hibrido">Hibrido</option>
+            <option value="oscuro">Oscuro</option>
+          </select>
+        </div>
+        <label class="ruta-roads-toggle" for="showRoadsRuta">
+          <input id="showRoadsRuta" type="checkbox" checked onchange="actualizarOverlayCarreterasRuta()">
+          Carreteras
+        </label>
+        <!-- Selector de perfil de transporte: cada modo usa una red de rutas diferente en OSRM -->
+        <div class="ruta-perfil-selector">
+          <button type="button" class="ruta-perfil-btn active" data-perfil="driving"  onclick="seleccionarPerfilRuta(this)" title="Rutas en auto">🚗 Auto</button>
+          <button type="button" class="ruta-perfil-btn"        data-perfil="cycling"  onclick="seleccionarPerfilRuta(this)" title="Rutas en bicicleta">🚴 Bici</button>
+          <button type="button" class="ruta-perfil-btn"        data-perfil="walking"  onclick="seleccionarPerfilRuta(this)" title="Rutas a pie">🚶 A pie</button>
+        </div>
+        <span class="ruta-chip trafico-bajo">Trafico bajo</span>
+        <span class="ruta-chip trafico-medio">Trafico medio</span>
+        <span class="ruta-chip trafico-alto">Trafico alto</span>
+      </div>
+      <div class="rutas-map-wrapper">
+        <!-- div controlado por Leaflet.js; NO usar iframe -->
+        <div
+          id="rutaMapFrame"
+          class="rutas-map-frame"
+          aria-label="Mapa de ruta"
+        ></div>
+      </div>
+      <p id="rutaMapHint" class="rutas-map-hint">Seleccione un ID Pedido para cargar origen (Lugar) y destino en el mapa.</p>
     </div>
   </div>
 </div>
