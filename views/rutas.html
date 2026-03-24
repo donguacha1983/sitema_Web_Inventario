@@ -1,0 +1,41 @@
+<!-- Vista parcial: Rutas -->
+<div class="content-header">
+  <h2>Registro de Rutas</h2>
+</div>
+<div class="content-body">
+  <div class="card">
+    <div class="card-header">Nueva Ruta</div>
+    <div class="card-body">
+      <form id="formRuta" onsubmit="registrarRuta(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="pedidoIdRuta">ID Pedido *</label>
+            <input id="pedidoIdRuta" type="text" placeholder="ID del pedido" list="listaPedidoIdsRutas" oninput="actualizarResumenRutaPorPedido()" onchange="actualizarResumenRutaPorPedido()" required>
+            <datalist id="listaPedidoIdsRutas"></datalist>
+          </div>
+          <div class="form-group">
+            <label for="nombreRuta">Ruta *</label>
+            <input id="nombreRuta" type="text" placeholder="Nombre o código de ruta" required>
+          </div>
+          <div class="form-group">
+            <label for="clienteRuta">Cliente</label>
+            <input id="clienteRuta" type="text" readonly>
+          </div>
+          <div class="form-group">
+            <label for="lugarRuta">Lugar</label>
+            <input id="lugarRuta" type="text" readonly>
+          </div>
+          <div class="form-group">
+            <label for="destinoRuta">Destino</label>
+            <input id="destinoRuta" type="text" readonly>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn btn-success">Guardar Ruta</button>
+          <button type="button" class="btn btn-secondary" onclick="limpiarFormRuta()">Limpiar</button>
+        </div>
+      </form>
+      <div id="msgRuta"></div>
+    </div>
+  </div>
+</div>
