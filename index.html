@@ -45,6 +45,12 @@
           </a>
         </li>
         <li class="nav-item">
+          <a class="nav-link" onclick="showTab('rutas')">
+            <span class="nav-icon">🛣️</span>
+            <span class="nav-text">Rutas</span>
+          </a>
+        </li>
+        <li class="nav-item">
           <a class="nav-link" onclick="showTab('inventario')">
             <span class="nav-icon">📊</span>
             <span class="nav-text">Inventario</span>
@@ -87,6 +93,9 @@
 
       <!-- Pestaña: Custodia (cargada desde views/custodia.html) -->
       <div id="custodia" class="tab-content"></div>
+
+      <!-- Pestaña: Rutas (cargada desde views/rutas.html) -->
+      <div id="rutas" class="tab-content"></div>
 
       <!-- Pestaña: Inventario (cargada desde views/inventario.html) -->
       <div id="inventario" class="tab-content"></div>
@@ -308,6 +317,7 @@
     let pedidosCache = [];
     let pedidoEditandoId = null;
     let custodiasCache = { custodios: [], vehiculos: [], pedidoIds: [] };
+    let rutasCache = { pedidoIds: [] };
     let tabViewsReadyPromise = null;
 
      /*
@@ -356,6 +366,7 @@
         dashboard: '/views/dashboard.html',
         pedidos: '/views/pedidos.html',
         custodia: '/views/custodia.html',
+        rutas: '/views/rutas.html',
         inventario: '/views/inventario.html',
         reportes: '/views/reportes.html',
         buscar: '/views/buscar.html'
@@ -402,6 +413,7 @@
       setDefaultDates();
       loadListas();
       loadListasCustodia();
+      cargarListasRutas();
       loadClientesReporte();
       loadDashboard();
       showTab('dashboard');
@@ -522,6 +534,10 @@
         case 'custodia':
           setPedidoIdCustodiaReadOnly(Boolean(options.bloquearPedidoId));
           cargarListasCustodia();
+          break;
+        case 'rutas':
+          setPedidoIdRutaReadOnly(Boolean(options.bloquearPedidoIdRuta));
+          cargarListasRutas();
           break;
         case 'reportes':
           loadClientesReporte();
@@ -1369,6 +1385,108 @@
       Promise.resolve(cargarListasCustodia()).finally(aplicarPedidoId);
     }
 
+    // Activa/desactiva edición del campo ID Pedido en Rutas.
+    function setPedidoIdRutaReadOnly(readOnly) {
+      const input = document.getElementById('pedidoIdRuta');
+      if (!input) return;
+      input.readOnly = Boolean(readOnly);
+    }
+
+    function obtenerPedidoPorIdLocal(pedidoId) {
+      const buscado = String(pedidoId || '').trim();
+      if (!buscado) return null;
+      return pedidosCache.find((item) => String(item.pedidoId || '').trim() === buscado) || null;
+    }
+
+    function actualizarResumenRutaPorPedido() {
+      const pedidoId = document.getElementById('pedidoIdRuta')?.value?.trim() || '';
+      const pedido = obtenerPedidoPorIdLocal(pedidoId);
+
+      const clienteInput = document.getElementById('clienteRuta');
+      const lugarInput = document.getElementById('lugarRuta');
+      const destinoInput = document.getElementById('destinoRuta');
+
+      if (!clienteInput || !lugarInput || !destinoInput) return;
+
+      if (!pedido) {
+        clienteInput.value = '';
+        lugarInput.value = '';
+        destinoInput.value = '';
+        return;
+      }
+
+      clienteInput.value = pedido.codigo || '';
+      lugarInput.value = pedido.nombre || '';
+      destinoInput.value = pedido.unidad || '';
+    }
+
+    function abrirRutasConPedidoId(pedidoId) {
+      showTab('rutas', { bloquearPedidoIdRuta: true });
+
+      const aplicarPedidoId = () => {
+        const pedidoIdInput = document.getElementById('pedidoIdRuta');
+        if (pedidoIdInput && pedidoId) {
+          pedidoIdInput.value = String(pedidoId);
+          pedidoIdInput.readOnly = true;
+          actualizarResumenRutaPorPedido();
+
+          const rutaInput = document.getElementById('nombreRuta');
+          if (rutaInput) {
+            rutaInput.focus();
+          }
+        }
+      };
+
+      Promise.resolve(cargarListasRutas()).finally(aplicarPedidoId);
+    }
+
+    function cargarListasRutas() {
+      const cargarPedidos = () => {
+        if (pedidosCache.length > 0) {
+          return Promise.resolve(pedidosCache);
+        }
+
+        return obtenerJsonConFallback([
+          `/api/pedidos?_ts=${Date.now()}`,
+          `/api/stock?_ts=${Date.now()}`
+        ], { cache: 'no-store' }).then((data) => {
+          pedidosCache = Array.isArray(data) ? data : [];
+          return pedidosCache;
+        });
+      };
+
+      return Promise.all([
+        obtenerJsonConFallback(['/api/rutas/listas']),
+        cargarPedidos()
+      ]).then(([listasData]) => {
+        if (!listasData || listasData.error) {
+          return;
+        }
+
+        rutasCache = {
+          pedidoIds: Array.isArray(listasData.pedidoIds) ? listasData.pedidoIds : []
+        };
+
+        fillDatalist('listaPedidoIdsRutas', rutasCache.pedidoIds);
+
+        const pedidoIdInput = document.getElementById('pedidoIdRuta');
+        if (pedidoIdInput && !pedidoIdInput.value && rutasCache.pedidoIds.length) {
+          const ultimoId = rutasCache.pedidoIds
+            .map(id => Number(id))
+            .filter(n => Number.isFinite(n))
+            .sort((a, b) => b - a)[0];
+
+          if (Number.isFinite(ultimoId)) {
+            pedidoIdInput.value = String(ultimoId);
+          }
+        }
+
+        actualizarResumenRutaPorPedido();
+      }).catch(() => {
+        // Si falla, la pantalla sigue operativa con entrada manual.
+      });
+    }
+
     // Carga jefes/custodios/placas desde Excel para la pestaña Custodia.
     function cargarListasCustodia() {
       return obtenerJsonConFallback(['/api/custodias/listas', '/api/custodia/listas'])
@@ -1629,6 +1747,49 @@
             showMessage('msgCustodia', 'Error: ' + error.message, 'error');
           });
       }
+    }
+
+    // Registra una ruta vinculada a un ID Pedido y muestra datos del pedido asociado.
+    function registrarRuta(event) {
+      event.preventDefault();
+
+      const pedidoId = document.getElementById('pedidoIdRuta').value.trim();
+      const ruta = document.getElementById('nombreRuta').value.trim();
+
+      if (!pedidoId || !ruta) {
+        showMessage('msgRuta', 'El ID del pedido y el nombre de ruta son obligatorios.', 'error');
+        return;
+      }
+
+      const pedido = obtenerPedidoPorIdLocal(pedidoId);
+      const payload = {
+        pedidoId,
+        ruta,
+        cliente: pedido?.codigo || '',
+        lugar: pedido?.nombre || '',
+        destino: pedido?.unidad || ''
+      };
+
+      obtenerJsonConFallback(['/api/rutas'], {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+        .then((data) => {
+          if (data.error) {
+            showMessage('msgRuta', data.error, 'error');
+            return;
+          }
+
+          showMessage('msgRuta', data.mensaje || 'Ruta registrada correctamente', 'success');
+          document.getElementById('nombreRuta').value = '';
+          setTimeout(() => {
+            cargarListasRutas();
+          }, 150);
+        })
+        .catch((error) => {
+          showMessage('msgRuta', 'Error: ' + error.message, 'error');
+        });
     }
 
     // Ejecuta búsqueda de pedidos y renderiza resultados.
@@ -2123,6 +2284,13 @@
       document.getElementById('msgCustodia').innerHTML = '';
     }
 
+    // Limpia formulario de rutas.
+    function limpiarFormRuta() {
+      document.getElementById('formRuta').reset();
+      document.getElementById('msgRuta').innerHTML = '';
+      actualizarResumenRutaPorPedido();
+    }
+
     // Limpia campo y resultados de búsqueda de pedidos.
     function limpiarBusqueda() {
       document.getElementById("buscarTexto").value = "";
@@ -2380,6 +2548,9 @@
             break;
           case 'custodia':
             document.getElementById('formCustodia').dispatchEvent(new Event('submit'));
+            break;
+          case 'rutas':
+            document.getElementById('formRuta').dispatchEvent(new Event('submit'));
             break;
         }
       }
