@@ -5,6 +5,7 @@ const {
   actualizarPedido,
   eliminarPedido,
   registrarCustodia,
+  registrarRuta,
   listarCustodios,
   crearCustodio,
   actualizarCustodio,
@@ -14,6 +15,7 @@ const {
   actualizarVehiculo,
   eliminarVehiculo,
   obtenerDatosCustodia,
+  obtenerDatosRutas,
   buscarPedido,
   obtenerListas,
   obtenerPedidos,
@@ -323,6 +325,34 @@ app.post('/api/custodias', async (req, res) => {
     res.json({ mensaje });
   } catch (error) {
     res.status(500).json({ error: 'No se pudo registrar custodia: ' + error.message });
+  }
+});
+
+// Registra una ruta asociada a un pedido.
+app.post('/api/rutas', async (req, res) => {
+  try {
+    const ruta = req.body || {};
+    const pedidoId = (ruta.pedidoId || ruta.codigo || '').toString().trim();
+
+    if (!pedidoId || !ruta.ruta) {
+      return res.status(400).json({ error: 'ID Pedido y nombre de ruta son obligatorios' });
+    }
+
+    const mensaje = await registrarRuta(ruta);
+    const status = mensaje.includes('correctamente') ? 200 : 400;
+    return res.status(status).json({ mensaje });
+  } catch (error) {
+    return res.status(500).json({ error: 'No se pudo registrar ruta: ' + error.message });
+  }
+});
+
+// Devuelve listas para formulario de rutas (ID Pedido).
+app.get('/api/rutas/listas', async (req, res) => {
+  try {
+    const datos = await obtenerDatosRutas();
+    return res.json(datos);
+  } catch (error) {
+    return res.status(500).json({ error: 'No se pudo obtener listas de rutas: ' + error.message });
   }
 });
 
