@@ -2,6 +2,8 @@ const { getWorkbook, saveWorkbook } = require('./excel');
 
 const HOJA_PEDIDOS = 'Pedidos';
 const HOJA_PEDIDOS_LEGACY = 'Productos';
+const HOJA_CUSTODIAS = 'Movimientos';
+const HOJA_RUTAS = 'Rutas';
 
 
 // La hoja historica era "Productos". Se migra automaticamente a "Pedidos".
@@ -229,6 +231,28 @@ function asegurarHojaCustodias(workbook) {
     sheet = workbook.addWorksheet(nombreHoja);
     sheet.addRow(['ID Pedido', 'Fecha', 'Tipo Registro', 'Cantidad', 'Observaciones', 'Valor Calculado']);
   }
+  return sheet;
+}
+
+// Asegura que exista la hoja de rutas con su cabecera.
+function asegurarHojaRutas(workbook) {
+  let sheet = workbook.getWorksheet(HOJA_RUTAS);
+  if (!sheet) {
+    sheet = workbook.addWorksheet(HOJA_RUTAS);
+    sheet.addRow(['ID Pedido', 'Fecha', 'Ruta', 'Cliente', 'Lugar', 'Destino']);
+    return sheet;
+  }
+
+  const headerRow = sheet.getRow(1);
+  const expectedHeaders = ['ID Pedido', 'Fecha', 'Ruta', 'Cliente', 'Lugar', 'Destino'];
+  expectedHeaders.forEach((title, index) => {
+    const col = index + 1;
+    const value = normalizarTexto(headerRow.getCell(col).value);
+    if (!value) {
+      headerRow.getCell(col).value = title;
+    }
+  });
+
   return sheet;
 }
 
@@ -856,6 +880,45 @@ async function registrarCustodia(custodia) {
   return 'Custodia registrada correctamente';
 }
 
+// Registra una ruta asociada a un ID de pedido.
+async function registrarRuta(data) {
+  const workbook = await getWorkbook();
+  const sheetRutas = asegurarHojaRutas(workbook);
+  const sheetPedidos = asegurarHojaPedidos(workbook);
+
+  const pedidoId = normalizarTexto(data.pedidoId || data.codigo);
+  const nombreRuta = normalizarTexto(data.ruta || data.nombreRuta);
+  const fecha = formatearFecha(data.fecha) || formatearFecha(new Date());
+
+  if (!pedidoId || !nombreRuta) {
+    return 'ID Pedido y nombre de ruta son obligatorios';
+  }
+
+  sincronizarIdsPedidoPorFila(sheetPedidos);
+
+  let pedidoRow = null;
+  sheetPedidos.eachRow((row, rowNumber) => {
+    if (rowNumber === 1 || pedidoRow) return;
+    const idPedido = normalizarTexto(row.getCell(COLUMNA_ID_PEDIDO).value);
+    if (idPedido === pedidoId) {
+      pedidoRow = row;
+    }
+  });
+
+  if (!pedidoRow) {
+    return 'No existe un pedido con ese ID Pedido';
+  }
+
+  const cliente = normalizarTexto(pedidoRow.getCell(COLUMNA_CLIENTE_PEDIDO).value);
+  const lugar = normalizarTexto(pedidoRow.getCell(COLUMNA_LUGAR_PEDIDO).value);
+  const destino = normalizarTexto(pedidoRow.getCell(COLUMNA_DESTINO_PEDIDO).value);
+
+  sheetRutas.addRow([pedidoId, fecha, nombreRuta, cliente, lugar, destino]);
+
+  await saveWorkbook(workbook);
+  return 'Ruta registrada correctamente';
+}
+
 // Obtiene listas operativas para custodias desde hojas CUSTODIOS y vehiculos.
 async function obtenerDatosCustodia() {
   const workbook = await getWorkbook();
@@ -899,6 +962,31 @@ async function obtenerDatosCustodia() {
   return {
     custodios: Array.from(custodiosSet),
     vehiculos: Array.from(vehiculosSet),
+    pedidoIds: Array.from(pedidoIdsSet)
+  };
+}
+
+// Obtiene listas operativas para la pestaña Rutas.
+async function obtenerDatosRutas() {
+  const workbook = await getWorkbook();
+  const pedidosSheet = asegurarHojaPedidos(workbook);
+  const pedidoIdsSet = new Set();
+
+  if (pedidosSheet) {
+    const huboCambios = sincronizarIdsPedidoPorFila(pedidosSheet);
+
+    pedidosSheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const pedidoId = normalizarTexto(row.getCell(COLUMNA_ID_PEDIDO).value);
+      if (pedidoId) pedidoIdsSet.add(pedidoId);
+    });
+
+    if (huboCambios) {
+      await saveWorkbook(workbook);
+    }
+  }
+
+  return {
     pedidoIds: Array.from(pedidoIdsSet)
   };
 }
@@ -1070,6 +1158,15 @@ async function inicializarExcel() {
     resumen.push(`Hoja '${hojaCustodias}' verificada (${sheetCustodias.rowCount - 1} registros)`);
   }
 
+  // --- Hoja de Rutas ---
+  const existiaRutas = Boolean(workbook.getWorksheet(HOJA_RUTAS));
+  const sheetRutas = asegurarHojaRutas(workbook);
+  if (!existiaRutas) {
+    resumen.push(`Hoja '${HOJA_RUTAS}' creada con sus columnas`);
+  } else {
+    resumen.push(`Hoja '${HOJA_RUTAS}' verificada (${sheetRutas.rowCount - 1} registros)`);
+  }
+
   // --- Hoja CUSTODIOS (lista de custodios) ---
   if (!workbook.getWorksheet('CUSTODIOS')) {
     const sh = workbook.addWorksheet('CUSTODIOS');
@@ -1098,6 +1195,7 @@ module.exports = {
   actualizarPedido,
   eliminarPedido,
   registrarCustodia,
+  registrarRuta,
   listarCustodios,
   crearCustodio,
   actualizarCustodio,
@@ -1107,6 +1205,7 @@ module.exports = {
   actualizarVehiculo,
   eliminarVehiculo,
   obtenerDatosCustodia,
+  obtenerDatosRutas,
   buscarPedido,
   obtenerListas,
   obtenerPedidos,
