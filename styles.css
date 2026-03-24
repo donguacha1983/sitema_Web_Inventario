@@ -644,6 +644,265 @@ tr:hover {
   margin-bottom: 20px;
 }
 
+.rutas-map-card {
+  margin-top: 20px;
+}
+
+.rutas-map-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.ruta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #f1f3f4;
+  color: #3c4043;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid #dfe1e5;
+}
+
+.ruta-chip.best {
+  background: #e8f0fe;
+  color: #1a73e8;
+  border-color: #d2e3fc;
+}
+
+.ruta-chip.muted {
+  color: #5f6368;
+  background: #f8f9fa;
+}
+
+.ruta-chip.trafico-bajo {
+  background: #e6f4ea;
+  color: #137333;
+  border-color: #c4e6cd;
+}
+
+.ruta-chip.trafico-medio {
+  background: #fff8e1;
+  color: #b06000;
+  border-color: #ffe4a6;
+}
+
+.ruta-chip.trafico-alto {
+  background: #fce8e6;
+  color: #c5221f;
+  border-color: #f6c4c1;
+}
+
+.ruta-chip.trafico-nd {
+  background: #f1f3f4;
+  color: #5f6368;
+}
+
+.ruta-style-selector {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 999px;
+  padding: 5px 10px;
+}
+
+.ruta-style-selector label {
+  font-size: 0.78rem;
+  color: #3c4043;
+  font-weight: 600;
+}
+
+.ruta-style-selector select {
+  border: 0;
+  background: transparent;
+  color: #1a73e8;
+  font-weight: 700;
+  font-size: 0.8rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.ruta-roads-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  color: #3c4043;
+  font-weight: 600;
+}
+
+.ruta-roads-toggle input {
+  accent-color: #1a73e8;
+}
+
+/* ---- Selector de perfil de transporte (Auto / Bici / A pie) ---- */
+.ruta-perfil-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  background: #f1f3f4;
+  border-radius: 999px;
+  padding: 3px;
+  border: 1px solid #dadce0;
+}
+
+.ruta-perfil-btn {
+  border: none;
+  background: transparent;
+  border-radius: 999px;
+  padding: 4px 11px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #3c4043;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+
+.ruta-perfil-btn.active {
+  background: #fff;
+  color: #1a73e8;
+  box-shadow: 0 1px 4px rgba(60,64,67,0.22);
+}
+
+.ruta-perfil-btn:hover:not(.active) {
+  background: #e8eaed;
+}
+
+.rutas-map-wrapper {
+  width: 100%;
+  border: 1px solid #dadce0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #111;
+  box-shadow: 0 2px 8px rgba(60,64,67,0.18);
+}
+
+/* div gestionado por Leaflet – necesita altura explícita y posición relativa */
+.rutas-map-frame {
+  width: 100%;
+  height: 500px;
+  display: block;
+  position: relative;
+  z-index: 0;
+}
+
+.rutas-map-frame .leaflet-control-zoom a {
+  border-radius: 8px !important;
+  border: 1px solid #dadce0 !important;
+  color: #3c4043 !important;
+}
+
+/* Ajuste z-index para que los controles de Leaflet queden por encima del sidebar */
+.rutas-map-frame .leaflet-top,
+.rutas-map-frame .leaflet-bottom {
+  z-index: 1;
+}
+
+.rutas-map-hint {
+  margin-top: 10px;
+  color: #1a73e8;
+  font-size: 0.9rem;
+  min-height: 1.5em;
+  line-height: 1.45;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #eef4ff;
+  border: 1px solid #d7e3ff;
+}
+
+.rutas-map-hint.traffic-low {
+  background: #e9f7ee;
+  border-color: #c4e6cd;
+  color: #146c2e;
+}
+
+.rutas-map-hint.traffic-medium {
+  background: #fff8e6;
+  border-color: #ffe0a6;
+  color: #9a5a00;
+}
+
+.rutas-map-hint.traffic-high {
+  background: #fdeceb;
+  border-color: #f6c4c1;
+  color: #b3261e;
+}
+
+.ruta-alternativas-panel {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.ruta-alt-item {
+  text-align: left;
+  border: 1px solid #dadce0;
+  background: #fff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #202124;
+  cursor: pointer;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.ruta-alt-item:hover {
+  background: #f8f9fa;
+}
+
+.ruta-alt-item.active {
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.15);
+  background: #eef4ff;
+}
+
+/* Panel lateral de Leaflet Routing Machine (lista de alternativas) */
+.leaflet-routing-container {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #dadce0;
+  box-shadow: 0 2px 10px rgba(60,64,67,0.22);
+  font-size: 0.84rem;
+  max-width: 320px;
+  max-height: 390px;
+  overflow-y: auto;
+  margin: 12px;
+}
+
+.leaflet-routing-container h2,
+.leaflet-routing-container h3 {
+  color: #202124;
+  font-weight: 700;
+}
+
+.leaflet-routing-alt {
+  cursor: pointer;
+  padding: 8px 12px;
+  border-bottom: 1px solid #eef0f1;
+  transition: background 0.15s;
+}
+.leaflet-routing-alt:hover {
+  background: #f1f3f4;
+}
+.leaflet-routing-alt.leaflet-routing-alt-minimized {
+  background: #e8f0fe;
+  font-weight: 600;
+  color: #1a73e8;
+}
+
 .role-pill {
   display: inline-block;
   padding: 4px 10px;
