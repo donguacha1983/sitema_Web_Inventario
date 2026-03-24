@@ -1,0 +1,20 @@
+{
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1"
+  },
+  "name": "sitema_web_inventario",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "devDependencies": {},
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

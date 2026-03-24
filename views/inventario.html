@@ -1,0 +1,24 @@
+<!-- Vista parcial: Inventario -->
+<div class="content-header">
+  <h2>Control de Pedidos</h2>
+</div>
+<div class="content-body">
+  <div class="card">
+    <div class="card-header">Pedidos Actuales</div>
+    <div class="card-body">
+      <div class="actions">
+        <button class="btn btn-primary" onclick="mostrarPedidos()">
+          Actualizar Pedidos
+        </button>
+        <button class="btn btn-warning" onclick="mostrarAlertasPedidos()">
+          Solo Pendientes
+        </button>
+      </div>
+      <div id="msgPedidos"></div>
+      <div id="loading" class="loading">Cargando pedidos...</div>
+      <div class="table-container">
+        <div id="pedidosTable"></div>
+      </div>
+    </div>
+  </div>
+</div>

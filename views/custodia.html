@@ -1,0 +1,53 @@
+<!-- Vista parcial: Custodia -->
+<div class="content-header">
+  <h2>Registro de Custodia</h2>
+</div>
+<div class="content-body">
+  <div class="card">
+    <div class="card-header">Nueva Custodia</div>
+    <div class="card-body">
+      <form id="formCustodia" onsubmit="registrarCustodia(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="pedidoIdCustodia">ID Pedido *</label>
+            <input id="pedidoIdCustodia" type="text" placeholder="ID del pedido" list="listaPedidoIds" required>
+            <datalist id="listaPedidoIds"></datalist>
+          </div>
+          <div class="form-group">
+            <label for="jefePatrullaCustodia">Jefe de Patrulla *</label>
+            <input id="jefePatrullaCustodia" type="text" placeholder="Nombre 1" list="listaJefePatrulla" required>
+            <datalist id="listaJefePatrulla"></datalist>
+          </div>
+          <div class="form-group">
+            <label for="custodio2Custodia">Custodio 2 *</label>
+            <input id="custodio2Custodia" type="text" placeholder="Nombre 2" list="listaCustodio2" required>
+            <datalist id="listaCustodio2"></datalist>
+          </div>
+          <div class="form-group">
+            <label for="custodio3Custodia">Custodio 3 *</label>
+            <input id="custodio3Custodia" type="text" placeholder="Nombre 3" list="listaCustodio3" required>
+            <datalist id="listaCustodio3"></datalist>
+          </div>
+          <div class="form-group">
+            <label for="placaVehiculoCustodia">Placa de Vehículo *</label>
+            <input id="placaVehiculoCustodia" type="text" placeholder="Placa del vehículo" list="listaVehiculos" required>
+            <datalist id="listaVehiculos"></datalist>
+          </div>
+          <div class="form-group">
+            <label for="observacionesCustodia">Observaciones</label>
+            <textarea id="observacionesCustodia" placeholder="Observaciones opcionales" rows="3"></textarea>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn btn-success">
+            Guardar Pedido
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="limpiarFormCustodia()">
+            Limpiar
+          </button>
+        </div>
+      </form>
+      <div id="msgCustodia"></div>
+    </div>
+  </div>
+</div>

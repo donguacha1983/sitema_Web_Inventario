@@ -1,0 +1,66 @@
+<!-- Vista parcial: Pedido -->
+<div class="content-header">
+  <h2>Gestión de Pedidos</h2>
+</div>
+<div class="content-body">
+  <div class="card">
+    <div class="card-header">Registrar Pedido</div>
+    <div class="card-body">
+      <form id="formProducto" onsubmit="registrarPedido(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="codigoProd">Cliente *</label>
+            <input id="codigoProd" type="text" placeholder="Nombre o código del cliente" required>
+          </div>
+          <div class="form-group">
+            <label for="nombreProd">Lugar *</label>
+            <input id="nombreProd" type="text" placeholder="Lugar del servicio" required>
+          </div>
+          <div class="form-group">
+            <label for="unidadProd">Destino</label>
+            <input id="unidadProd" type="text" placeholder="Escriba el destino" required>
+          </div>
+          <div class="form-group">
+            <label for="grupoProd">Tipo de Custodia</label>
+            <!-- Opciones base; la función cargarSelects() las reemplaza dinámicamente al cargar. -->
+            <select id="grupoProd" required>
+              <option value="Fluvial">Fluvial</option>
+              <option value="Interna">Interna</option>
+              <option value="Externa">Externa</option>
+              <option value="Hombre en Cabina">Hombre en Cabina</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="guiaPedido"># Guía</label>
+            <input id="guiaPedido" type="text" placeholder="Ingrese # guía">
+          </div>
+          <div class="form-group">
+            <label for="fechaPedido">Fecha</label>
+            <input id="fechaPedido" type="date">
+          </div>
+          <div class="form-group">
+            <label for="horaPedido">Hora de pedido</label>
+            <input id="horaPedido" type="time">
+          </div>
+          <div class="form-group">
+            <label for="estadoPedido">Estado</label>
+            <select id="estadoPedido">
+              <option value="PENDIENTE">PENDIENTE</option>
+              <option value="EN PROCESO">EN PROCESO</option>
+              <option value="FINALIZADO">FINALIZADO</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="productSubmitBtn" type="submit" class="btn btn-success">
+            Siguiente
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="limpiarFormPedido()">
+            Limpiar
+          </button>
+        </div>
+      </form>
+      <div id="msgProd"></div>
+    </div>
+  </div>
+</div>

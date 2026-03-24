@@ -1,0 +1,2402 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body onload="initializeApp()">
+  <!-- Contenedor donde se monta el login desde login-view.html -->
+  <div id="loginMount"></div>
+
+  <!-- Contenedor principal de la aplicación (visible tras login) -->
+  <div class="app-container">
+    <!-- Menú lateral de navegación -->
+    <nav class="sidebar">
+      <div class="sidebar-header">
+        <h1>Gestion de Pedidos</h1>
+        <button
+          type="button"
+          class="sidebar-toggle-btn"
+          onclick="toggleSidebar()"
+          title="Contraer o expandir menú"
+          aria-label="Contraer o expandir menú"
+          aria-expanded="true"
+        >
+          <span class="sidebar-toggle-icon">≡</span>
+        </button>
+      </div>
+      <ul class="nav-menu">
+        <li class="nav-item">
+          <a class="nav-link active" onclick="showTab('dashboard')">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Dashboard</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="showTab('pedidos')">
+            <span class="nav-icon">📦</span>
+            <span class="nav-text">Pedidos</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="showTab('custodia')">
+            <span class="nav-icon">📋</span>
+            <span class="nav-text">Custodia</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="showTab('inventario')">
+            <span class="nav-icon">📊</span>
+            <span class="nav-text">Inventario</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="showTab('reportes')">
+            <span class="nav-icon">📈</span>
+            <span class="nav-text">Reportes</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" onclick="showTab('buscar')">
+            <span class="nav-icon">🔍</span>
+            <span class="nav-text">Buscar</span>
+          </a>
+        </li>
+        <li id="navConfigItem" class="nav-item">
+          <a class="nav-link" onclick="showTab('configuracion')">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-text">Configuración</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <!-- Área de contenido y pestañas -->
+    <div class="main-content">
+      <!-- Barra de sesión del usuario -->
+      <div class="session-topbar">
+        <span id="currentUserText" class="session-user">Sin sesión</span>
+        <button type="button" class="btn btn-secondary" onclick="logout()">Cerrar sesión</button>
+      </div>
+
+      <!-- Pestaña: Dashboard (cargada desde views/dashboard.html) -->
+      <div id="dashboard" class="tab-content active"></div>
+
+      <!-- Pestaña: Pedidos (cargada desde views/pedidos.html) -->
+      <div id="pedidos" class="tab-content"></div>
+
+      <!-- Pestaña: Custodia (cargada desde views/custodia.html) -->
+      <div id="custodia" class="tab-content"></div>
+
+      <!-- Pestaña: Inventario (cargada desde views/inventario.html) -->
+      <div id="inventario" class="tab-content"></div>
+
+      <!-- Pestaña: Reportes (cargada desde views/reportes.html) -->
+      <div id="reportes" class="tab-content"></div>
+
+      <!-- Pestaña: Buscar (cargada desde views/buscar.html) -->
+      <div id="buscar" class="tab-content"></div>
+
+      <!-- Pestaña: Configuración (admin) -->
+      <div id="configuracion" class="tab-content">
+        <div class="content-header">
+          <h2>Configuración del Sistema</h2>
+        </div>
+        <div class="content-body">
+          <div class="card">
+            <div class="card-header">Herramientas de Administración</div>
+            <div class="card-body">
+              <div class="actions">
+                <button class="btn btn-primary" onclick="configurarBD()">
+                  Configuración BD
+                </button>
+              </div>
+              <div id="configResults"></div>
+            </div>
+          </div>
+
+          <div class="card config-collapsible-card">
+            <div
+              class="card-header config-toggle-header"
+              onclick="toggleConfigSection('configCustodiosBody', this)"
+              role="button"
+              tabindex="0"
+              aria-expanded="false"
+              onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleConfigSection('configCustodiosBody', this); }"
+            >
+              <span>Gestión de Custodios</span>
+              <span class="config-toggle-icon">+</span>
+            </div>
+            <div id="configCustodiosBody" class="card-body config-collapsible-body collapsed">
+              <form id="custodioForm" onsubmit="guardarCustodio(event)">
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="custodioNombres">Nombres *</label>
+                    <input id="custodioNombres" type="text" placeholder="Nombres" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="custodioApellidos">Apellidos *</label>
+                    <input id="custodioApellidos" type="text" placeholder="Apellidos" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="custodioCi">CI *</label>
+                    <input id="custodioCi" type="text" placeholder="Cédula" required maxlength="10" minlength="10" inputmode="numeric" pattern="\d{10}">
+                  </div>
+                  <div class="form-group">
+                    <label for="custodioTelefono">Teléfono *</label>
+                    <input id="custodioTelefono" type="text" placeholder="Teléfono" required maxlength="10" minlength="10" inputmode="numeric" pattern="\d{10}">
+                  </div>
+                </div>
+                <div class="actions">
+                  <button type="submit" class="btn btn-success" id="custodioSubmitBtn">Crear custodio</button>
+                  <button type="button" class="btn btn-secondary" onclick="resetFormularioCustodio()">Limpiar</button>
+                </div>
+              </form>
+
+              <div id="custodiosMessage"></div>
+
+              <div class="actions" style="margin-top: 16px;">
+                <button class="btn btn-primary" onclick="cargarCustodios()">Actualizar lista</button>
+              </div>
+
+              <div class="table-container">
+                <div id="custodiosTable"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card config-collapsible-card">
+            <div
+              class="card-header config-toggle-header"
+              onclick="toggleConfigSection('configVehiculosBody', this)"
+              role="button"
+              tabindex="0"
+              aria-expanded="false"
+              onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleConfigSection('configVehiculosBody', this); }"
+            >
+              <span>Gestión de Vehículos</span>
+              <span class="config-toggle-icon">+</span>
+            </div>
+            <div id="configVehiculosBody" class="card-body config-collapsible-body collapsed">
+              <form id="vehiculoForm" onsubmit="guardarVehiculo(event)">
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="vehiculoPlaca">Placa *</label>
+                    <input id="vehiculoPlaca" type="text" placeholder="ABC-1234" required>
+                  </div>
+                </div>
+                <div class="actions">
+                  <button type="submit" class="btn btn-success" id="vehiculoSubmitBtn">Crear vehículo</button>
+                  <button type="button" class="btn btn-secondary" onclick="resetFormularioVehiculo()">Limpiar</button>
+                </div>
+              </form>
+
+              <div id="vehiculosMessage"></div>
+
+              <div class="actions" style="margin-top: 16px;">
+                <button class="btn btn-primary" onclick="cargarVehiculosAdmin()">Actualizar lista</button>
+              </div>
+
+              <div class="table-container">
+                <div id="vehiculosTable"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card config-collapsible-card">
+            <div
+              class="card-header config-toggle-header"
+              onclick="toggleConfigSection('configUsuariosBody', this)"
+              role="button"
+              tabindex="0"
+              aria-expanded="false"
+              onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleConfigSection('configUsuariosBody', this); }"
+            >
+              <span>Gestión de Usuarios</span>
+              <span class="config-toggle-icon">+</span>
+            </div>
+            <div id="configUsuariosBody" class="card-body config-collapsible-body collapsed">
+              <form id="userForm" onsubmit="guardarUsuario(event)">
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="userUsername">Usuario *</label>
+                    <input id="userUsername" type="text" placeholder="usuario" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="userDisplayName">Nombre visible *</label>
+                    <input id="userDisplayName" type="text" placeholder="Nombre completo" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="userPassword">Contraseña <span id="userPasswordHint">*</span></label>
+                    <input id="userPassword" type="password" placeholder="Contraseña del usuario">
+                  </div>
+                  <div class="form-group">
+                    <label for="userRole">Rol *</label>
+                    <select id="userRole" required>
+                      <option value="admin">Administrador</option>
+                      <option value="user">Usuario</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="actions">
+                  <button type="submit" class="btn btn-success" id="userSubmitBtn">Crear usuario</button>
+                  <button type="button" class="btn btn-secondary" onclick="resetFormularioUsuario()">Limpiar</button>
+                </div>
+              </form>
+
+              <div id="usersMessage"></div>
+
+              <div class="actions" style="margin-top: 16px;">
+                <button class="btn btn-primary" onclick="cargarUsuarios()">Actualizar lista</button>
+              </div>
+
+              <div class="table-container">
+                <div id="usersTable"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de vista previa de pedidos -->
+  <div id="pedidosPreviewModal" class="preview-modal">
+    <div class="preview-modal-content">
+      <div class="preview-modal-header">
+        <span>Vista previa de pedidos (imagen)</span>
+      </div>
+      <div class="preview-modal-body">
+        <img id="pedidosPreviewImage" alt="Vista previa de pedidos para impresión">
+      </div>
+      <div class="preview-modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="cerrarVistaPreviaPedidos()">Cancelar</button>
+        <button type="button" class="btn btn-success" onclick="imprimirPedidosPDF()">Imprimir PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de vista previa de reporte -->
+  <div id="reportePreviewModal" class="preview-modal">
+    <div class="preview-modal-content">
+      <div class="preview-modal-header">
+        <span>Vista previa de reporte (imagen)</span>
+      </div>
+      <div class="preview-modal-body">
+        <img id="reportePreviewImage" alt="Vista previa del reporte para impresión">
+      </div>
+      <div class="preview-modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="cerrarVistaPreviaReporte()">Cancelar</button>
+        <button type="button" class="btn btn-success" onclick="imprimirReportePDF()">Imprimir PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="login.js"></script>
+
+  <!-- Lógica principal de interfaz (tabs, formularios, dashboard, reportes) -->
+  <script>
+    let currentTab = 'dashboard';
+    let searchTimeout;
+    let usuariosCache = [];
+    let usuarioEditando = null;
+    let custodiosAdminCache = [];
+    let custodioEditandoId = null;
+    let vehiculosAdminCache = [];
+    let vehiculoEditandoId = null;
+    let pedidosCache = [];
+    let pedidoEditandoId = null;
+    let custodiasCache = { custodios: [], vehiculos: [], pedidoIds: [] };
+    let tabViewsReadyPromise = null;
+
+     /*
+      INDICE RAPIDO DEL FRONTEND
+
+      1) Sesion y navegacion:
+        - initializeAfterLogin
+        - showTab
+
+      2) Usuarios (admin):
+        - cargarUsuarios / renderTablaUsuarios
+        - guardarUsuario / editarUsuario / eliminarUsuario
+
+      2.1) Custodios (admin):
+        - cargarCustodios / renderTablaCustodios
+        - guardarCustodio / editarCustodio / eliminarCustodio
+
+      2.2) Vehículos (admin):
+        - cargarVehiculosAdmin / renderTablaVehiculos
+        - guardarVehiculo / editarVehiculo / eliminarVehiculo
+
+      3) Dashboard y catalogos:
+        - loadDashboard / mostrarAlertasDashboard
+        - getListasPorDefecto / cargarSelects / loadListas / cargarListasCustodia
+
+      4) Pedidos (pestaña Pedidos):
+        - registrarPedido / editarPedidoDesdeInventario / eliminarPedidoDesdeInventario
+        - mostrarPedidos / mostrarAlertasPedidos / renderTablaPedidos
+
+      5) Custodia (pestaña Custodia):
+        - registrarCustodia / abrirCustodiaConPedidoId
+        - fillDatalist
+
+      6) Busqueda y reportes:
+        - buscarPedido / buscarEnTiempoReal / displaySearchResults
+        - mostrarHistorial / displayHistorialTable
+        - exportarPedidos / exportarReporte
+
+      7) Utilidades de UI:
+        - showMessage / escapeHtml
+        - limpiarFormPedido / limpiarFormCustodia / limpiarBusqueda / limpiarTodosFormularios
+     */
+
+      // Catálogo de archivos de vista para cada pestaña principal.
+      const TAB_VIEW_FILES = {
+        dashboard: '/views/dashboard.html',
+        pedidos: '/views/pedidos.html',
+        custodia: '/views/custodia.html',
+        inventario: '/views/inventario.html',
+        reportes: '/views/reportes.html',
+        buscar: '/views/buscar.html'
+      };
+
+      // Carga en el DOM las vistas HTML externas sin alterar la lógica existente.
+      async function ensureTabViewsLoaded() {
+        if (tabViewsReadyPromise) {
+          return tabViewsReadyPromise;
+        }
+
+        tabViewsReadyPromise = (async () => {
+          const entries = Object.entries(TAB_VIEW_FILES);
+
+          for (const [tabId, viewPath] of entries) {
+            const container = document.getElementById(tabId);
+            if (!container || container.dataset.viewLoaded === 'true') {
+              continue;
+            }
+
+            try {
+              const response = await obtenerApiResponse(viewPath, { method: 'GET' });
+              if (!response.ok) {
+                throw new Error(`No se pudo cargar ${viewPath}`);
+              }
+
+              container.innerHTML = await response.text();
+              container.dataset.viewLoaded = 'true';
+            } catch (error) {
+              container.innerHTML = '<div class="content-body"><div class="message error">No se pudo cargar la vista. Recargue la página.</div></div>';
+              container.dataset.viewLoaded = 'error';
+              throw error;
+            }
+          }
+        })();
+
+        return tabViewsReadyPromise;
+      }
+
+    // Inicializa datos esenciales del frontend una vez autenticado el usuario.
+      async function initializeAfterLogin() {
+        await ensureTabViewsLoaded();
+      initializeSidebarState();
+      setDefaultDates();
+      loadListas();
+      loadListasCustodia();
+      loadClientesReporte();
+      loadDashboard();
+      showTab('dashboard');
+
+      if (isAdminUser()) {
+        cargarUsuarios();
+        cargarCustodios();
+        cargarVehiculosAdmin();
+      }
+    }
+
+    function setSidebarCollapsed(collapsed) {
+      const appContainer = document.querySelector('.app-container');
+      const toggleBtn = document.querySelector('.sidebar-toggle-btn');
+      if (!appContainer) return;
+
+      appContainer.classList.toggle('sidebar-collapsed', Boolean(collapsed));
+
+      if (toggleBtn) {
+        toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+        toggleBtn.title = collapsed ? 'Expandir menú' : 'Contraer menú';
+      }
+    }
+
+    function initializeSidebarState() {
+      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      if (isMobile) {
+        setSidebarCollapsed(false);
+        return;
+      }
+
+      const saved = localStorage.getItem('sidebarCollapsed') === 'true';
+      setSidebarCollapsed(saved);
+    }
+
+    function toggleSidebar() {
+      const isMobile = window.matchMedia('(max-width: 768px)').matches;
+      if (isMobile) {
+        return;
+      }
+
+      const appContainer = document.querySelector('.app-container');
+      if (!appContainer) return;
+
+      const collapsed = !appContainer.classList.contains('sidebar-collapsed');
+      setSidebarCollapsed(collapsed);
+      localStorage.setItem('sidebarCollapsed', String(collapsed));
+    }
+
+    // Define fechas iniciales para formularios y filtros.
+    function setDefaultDates() {
+      const today = new Date();
+      const monthAgo = new Date();
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+      const fechaPedidoInput = document.getElementById("fechaPedido");
+      if (fechaPedidoInput && fechaPedidoInput.type === 'date') {
+        fechaPedidoInput.valueAsDate = today;
+      }
+
+      const horaPedidoInput = document.getElementById('horaPedido');
+      if (horaPedidoInput && horaPedidoInput.type === 'time') {
+        horaPedidoInput.value = `${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`;
+      }
+
+      document.getElementById("fechaDesde").valueAsDate = monthAgo;
+      document.getElementById("fechaHasta").valueAsDate = today;
+    }
+
+    // Activa/desactiva edición del campo ID Pedido en Custodia.
+    function setPedidoIdCustodiaReadOnly(readOnly) {
+      const input = document.getElementById('pedidoIdCustodia');
+      if (!input) return;
+      input.readOnly = Boolean(readOnly);
+    }
+
+    // Gestiona navegación entre pestañas y validación de permisos.
+    function showTab(tabName, options = {}) {
+      if (!currentUser) {
+        showLoginOverlay();
+        return;
+      }
+
+      if (tabName === 'configuracion' && !isAdminUser()) {
+        alert('No tiene permisos para acceder a Configuración.');
+        return;
+      }
+
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      
+      document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+      });
+      
+      document.getElementById(tabName).classList.add('active');
+      const activeLink = document.querySelector(`.nav-link[onclick="showTab('${tabName}')"]`);
+      if (activeLink) {
+        activeLink.classList.add('active');
+      }
+      
+      currentTab = tabName;
+      
+      switch(tabName) {
+        case 'dashboard':
+          loadDashboard();
+          break;
+        case 'inventario': {
+          const stContainer = getInventarioTableContainer();
+          if (pedidosCache.length > 0 && stContainer) {
+            renderTablaPedidos(pedidosCache, stContainer);
+          }
+          // Refresca siempre en segundo plano para evitar ver datos antiguos.
+          mostrarPedidos();
+          break;
+        }
+        case 'custodia':
+          setPedidoIdCustodiaReadOnly(Boolean(options.bloquearPedidoId));
+          cargarListasCustodia();
+          break;
+        case 'reportes':
+          loadClientesReporte();
+          break;
+        case 'configuracion':
+          if (isAdminUser()) {
+            cargarUsuarios();
+            cargarCustodios();
+            cargarVehiculosAdmin();
+          }
+          break;
+      }
+    }
+
+    // Encapsula fetch normal/fallback para consumir API local de forma robusta.
+    function obtenerApiResponse(path, options = {}) {
+      if (typeof fetchWithApiFallback === 'function') {
+        return fetchWithApiFallback(path, options);
+      }
+
+      return fetch(path, options);
+    }
+
+    // Intenta varias rutas equivalentes y solo acepta respuestas JSON válidas.
+    async function obtenerJsonConFallback(paths, options = {}) {
+      const errores = [];
+
+      for (const path of paths) {
+        try {
+          const response = await obtenerApiResponse(path, options);
+          const contentType = (response.headers.get('content-type') || '').toLowerCase();
+
+          if (!response.ok) {
+            errores.push(`${path} respondió ${response.status}`);
+            continue;
+          }
+
+          if (!contentType.includes('application/json')) {
+            const body = await response.text();
+            errores.push(`${path} no devolvió JSON: ${body.slice(0, 80)}`);
+            continue;
+          }
+
+          return await response.json();
+        } catch (error) {
+          errores.push(`${path}: ${error.message}`);
+        }
+      }
+
+      throw new Error(errores[0] || 'No se pudo obtener una respuesta JSON válida');
+    }
+
+    // Escapa texto dinámico para evitar inyección HTML al renderizar tablas.
+    function escapeHtml(text) {
+      return (text || '').toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Determina estado operativo a partir del valor manual del pedido.
+    function getEstadoOperativoPedido(item) {
+      const estadoManual = String(item?.estado || '').trim().toUpperCase();
+      if (estadoManual === 'PENDIENTE' || estadoManual === 'FINALIZADO' || estadoManual === 'EN PROCESO') {
+        return estadoManual;
+      }
+
+      return 'PENDIENTE';
+    }
+
+    // Renderiza etiqueta visual del estado.
+    function renderEstadoBadge(estado) {
+      const valor = String(estado || '').trim().toUpperCase();
+      const css = valor === 'PENDIENTE'
+        ? 'estado-pill pendiente'
+        : valor === 'FINALIZADO'
+        ? 'estado-pill finalizado'
+        : valor === 'EN PROCESO'
+        ? 'estado-pill en-proceso'
+        : 'estado-pill neutral';
+
+      return `<span class="${css}">${escapeHtml(valor || '-')}</span>`;
+    }
+
+    // Resuelve el contenedor principal de la tabla de pedidos.
+    function getInventarioTableContainer() {
+      return document.getElementById('pedidosTable');
+    }
+
+    // Resuelve el destino principal de mensajes de la pestaña Inventario.
+    function getInventarioMessageTarget() {
+      if (document.getElementById('msgPedidos')) return 'msgPedidos';
+      if (document.getElementById('pedidosTable')) return 'pedidosTable';
+      return 'msgPedidos';
+    }
+
+    // Carga usuarios desde backend para la sección de administración.
+    async function cargarUsuarios() {
+      if (!isAdminUser()) {
+        return;
+      }
+
+      try {
+        const response = await obtenerApiResponse('/api/usuarios');
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          showMessage('usersMessage', data.error || 'No se pudo cargar usuarios', 'error');
+          return;
+        }
+
+        usuariosCache = Array.isArray(data) ? data : [];
+        renderTablaUsuarios(usuariosCache);
+      } catch (error) {
+        showMessage('usersMessage', 'Error al cargar usuarios: ' + error.message, 'error');
+      }
+    }
+
+    // Construye la tabla de usuarios y sus acciones de edición/eliminación.
+    function renderTablaUsuarios(users) {
+      const container = document.getElementById('usersTable');
+
+      if (!users.length) {
+        container.innerHTML = '<div class="message warning">No hay usuarios registrados</div>';
+        return;
+      }
+
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Nombre</th>
+              <th>Rol</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      users.forEach((user) => {
+        const roleClass = user.role === 'admin' ? 'admin' : 'user';
+        const roleLabel = user.role === 'admin' ? 'Administrador' : 'Usuario';
+        const isCurrent = currentUser && currentUser.username === user.username;
+        const encodedUsername = encodeURIComponent(user.username);
+
+        html += `
+          <tr>
+            <td>${escapeHtml(user.username)}${isCurrent ? ' (actual)' : ''}</td>
+            <td>${escapeHtml(user.displayName)}</td>
+            <td><span class="role-pill ${roleClass}">${roleLabel}</span></td>
+            <td>
+              <div class="table-actions">
+                <button class="btn btn-warning" onclick="editarUsuario('${encodedUsername}')">Editar</button>
+                <button class="btn btn-danger" onclick="eliminarUsuario('${encodedUsername}')">Eliminar</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    // Crea o actualiza usuario según el estado del formulario.
+    async function guardarUsuario(event) {
+      event.preventDefault();
+
+      if (!isAdminUser()) {
+        showMessage('usersMessage', 'No tiene permisos para gestionar usuarios', 'error');
+        return;
+      }
+
+      const username = document.getElementById('userUsername').value.trim().toLowerCase();
+      const displayName = document.getElementById('userDisplayName').value.trim();
+      const password = document.getElementById('userPassword').value;
+      const role = document.getElementById('userRole').value;
+
+      if (!username || !displayName) {
+        showMessage('usersMessage', 'Usuario y nombre visible son obligatorios', 'warning');
+        return;
+      }
+
+      if (!usuarioEditando && !password) {
+        showMessage('usersMessage', 'La contraseña es obligatoria para un usuario nuevo', 'warning');
+        return;
+      }
+
+      const payload = { username, displayName, role };
+      if (password) {
+        payload.password = password;
+      }
+
+      const endpoint = usuarioEditando
+        ? `/api/usuarios/${encodeURIComponent(usuarioEditando)}`
+        : '/api/usuarios';
+      const method = usuarioEditando ? 'PUT' : 'POST';
+
+      try {
+        const response = await obtenerApiResponse(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          showMessage('usersMessage', data.error || 'No se pudo guardar usuario', 'error');
+          return;
+        }
+
+        showMessage('usersMessage', usuarioEditando ? 'Usuario actualizado correctamente' : 'Usuario creado correctamente', 'success');
+        resetFormularioUsuario();
+        cargarUsuarios();
+      } catch (error) {
+        showMessage('usersMessage', 'Error al guardar usuario: ' + error.message, 'error');
+      }
+    }
+
+    // Pasa el formulario al modo edición con datos del usuario seleccionado.
+    function editarUsuario(encodedUsername) {
+      const username = decodeURIComponent(encodedUsername || '');
+      const user = usuariosCache.find((item) => item.username === username);
+      if (!user) {
+        showMessage('usersMessage', 'Usuario no encontrado en la lista actual', 'warning');
+        return;
+      }
+
+      usuarioEditando = user.username;
+      document.getElementById('userUsername').value = user.username;
+      document.getElementById('userDisplayName').value = user.displayName;
+      document.getElementById('userPassword').value = '';
+      document.getElementById('userRole').value = user.role;
+      document.getElementById('userSubmitBtn').textContent = 'Guardar cambios';
+      document.getElementById('userPasswordHint').textContent = '(opcional)';
+      showMessage('usersMessage', `Editando usuario ${user.username}. Si desea cambiar contraseña, ingrésela.`, 'info');
+    }
+
+    // Elimina usuario tras confirmación y recarga la lista.
+    async function eliminarUsuario(encodedUsername) {
+      const username = decodeURIComponent(encodedUsername || '');
+      if (!isAdminUser()) {
+        showMessage('usersMessage', 'No tiene permisos para eliminar usuarios', 'error');
+        return;
+      }
+
+      if (!confirm(`¿Eliminar usuario ${username}?`)) {
+        return;
+      }
+
+      try {
+        const response = await obtenerApiResponse(`/api/usuarios/${encodeURIComponent(username)}`, {
+          method: 'DELETE',
+          headers: {
+            'X-User-Role': currentUser?.role || '',
+            'X-User-Name': currentUser?.username || ''
+          }
+        });
+        const data = await response.json();
+
+        if (!response.ok || data.error) {
+          showMessage('usersMessage', data.error || 'No se pudo eliminar usuario', 'error');
+          return;
+        }
+
+        showMessage('usersMessage', 'Usuario eliminado correctamente', 'success');
+
+        if (usuarioEditando === username) {
+          resetFormularioUsuario();
+        }
+
+        cargarUsuarios();
+      } catch (error) {
+        showMessage('usersMessage', 'Error al eliminar usuario: ' + error.message, 'error');
+      }
+    }
+
+    // Limpia formulario de usuarios y regresa al modo creación.
+    function resetFormularioUsuario() {
+      usuarioEditando = null;
+      document.getElementById('userForm').reset();
+      document.getElementById('userRole').value = 'admin';
+      document.getElementById('userSubmitBtn').textContent = 'Crear usuario';
+      document.getElementById('userPasswordHint').textContent = '*';
+    }
+
+    // Carga custodios desde backend para la seccion de administracion.
+    function soloDigitos(valor) {
+      return String(valor || '').replace(/\D/g, '');
+    }
+
+    // Lee respuesta HTTP de forma segura y evita errores "Unexpected token '<'".
+    async function leerJsonSeguro(response) {
+      const contentType = (response.headers.get('content-type') || '').toLowerCase();
+      if (!contentType.includes('application/json')) {
+        const body = await response.text();
+        return { ok: false, data: null, body };
+      }
+      const data = await response.json();
+      return { ok: true, data, body: '' };
+    }
+
+    async function cargarCustodios() {
+      if (!isAdminUser()) {
+        return;
+      }
+
+      try {
+        const response = await obtenerApiResponse('/api/custodios');
+        const parsed = await leerJsonSeguro(response);
+
+        if (!parsed.ok) {
+          if (response.status === 404) {
+            showMessage('custodiosMessage', 'El endpoint de custodios no está activo. Reinicie el servidor con npm start.', 'warning');
+            return;
+          }
+          showMessage('custodiosMessage', `Respuesta inválida del servidor (${response.status}).`, 'error');
+          return;
+        }
+
+        const data = parsed.data;
+
+        if (!response.ok || data.error) {
+          showMessage('custodiosMessage', data.error || 'No se pudo cargar custodios', 'error');
+          return;
+        }
+
+        custodiosAdminCache = Array.isArray(data) ? data : [];
+        renderTablaCustodios(custodiosAdminCache);
+      } catch (error) {
+        showMessage('custodiosMessage', 'Error al cargar custodios: ' + error.message, 'error');
+      }
+    }
+
+    // Construye la tabla de custodios y sus acciones.
+    function renderTablaCustodios(custodios) {
+      const container = document.getElementById('custodiosTable');
+
+      if (!custodios.length) {
+        container.innerHTML = '<div class="message warning">No hay custodios registrados</div>';
+        return;
+      }
+
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>Nombres</th>
+              <th>Apellidos</th>
+              <th>CI</th>
+              <th>Teléfono</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      custodios.forEach((custodio) => {
+        const encodedId = encodeURIComponent(custodio.id || '');
+        html += `
+          <tr>
+            <td>${escapeHtml(custodio.nombres || '-')}</td>
+            <td>${escapeHtml(custodio.apellidos || '-')}</td>
+            <td>${escapeHtml(custodio.ci || '-')}</td>
+            <td>${escapeHtml(custodio.telefono || '-')}</td>
+            <td>
+              <div class="table-actions">
+                <button class="btn btn-warning" onclick="editarCustodio('${encodedId}')">Editar</button>
+                <button class="btn btn-danger" onclick="eliminarCustodio('${encodedId}')">Eliminar</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    // Crea o actualiza custodio segun el estado del formulario.
+    async function guardarCustodio(event) {
+      event.preventDefault();
+
+      if (!isAdminUser()) {
+        showMessage('custodiosMessage', 'No tiene permisos para gestionar custodios', 'error');
+        return;
+      }
+
+      const payload = {
+        nombres: document.getElementById('custodioNombres').value.trim(),
+        apellidos: document.getElementById('custodioApellidos').value.trim(),
+        ci: soloDigitos(document.getElementById('custodioCi').value),
+        telefono: soloDigitos(document.getElementById('custodioTelefono').value)
+      };
+
+      if (!payload.nombres || !payload.apellidos || !payload.ci || !payload.telefono) {
+        showMessage('custodiosMessage', 'Nombres, apellidos, CI y teléfono son obligatorios', 'warning');
+        return;
+      }
+
+      if (payload.ci.length !== 10) {
+        showMessage('custodiosMessage', 'La CI debe tener exactamente 10 dígitos', 'warning');
+        return;
+      }
+
+      if (payload.telefono.length !== 10) {
+        showMessage('custodiosMessage', 'El teléfono debe tener exactamente 10 dígitos', 'warning');
+        return;
+      }
+
+      const endpoint = custodioEditandoId
+        ? `/api/custodios/${encodeURIComponent(custodioEditandoId)}`
+        : '/api/custodios';
+      const method = custodioEditandoId ? 'PUT' : 'POST';
+
+      try {
+        const response = await obtenerApiResponse(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const parsed = await leerJsonSeguro(response);
+
+        if (!parsed.ok) {
+          showMessage('custodiosMessage', `Respuesta inválida del servidor (${response.status}).`, 'error');
+          return;
+        }
+
+        const data = parsed.data;
+
+        if (!response.ok || data.error) {
+          showMessage('custodiosMessage', data.error || data.mensaje || 'No se pudo guardar custodio', 'error');
+          return;
+        }
+
+        showMessage('custodiosMessage', data.mensaje || (custodioEditandoId ? 'Custodio actualizado correctamente' : 'Custodio creado correctamente'), 'success');
+        resetFormularioCustodio();
+        cargarCustodios();
+        cargarListasCustodia();
+      } catch (error) {
+        showMessage('custodiosMessage', 'Error al guardar custodio: ' + error.message, 'error');
+      }
+    }
+
+    // Pasa formulario al modo edicion con el custodio seleccionado.
+    function editarCustodio(encodedId) {
+      const id = decodeURIComponent(encodedId || '');
+      const custodio = custodiosAdminCache.find((item) => String(item.id || '') === id);
+
+      if (!custodio) {
+        showMessage('custodiosMessage', 'Custodio no encontrado en la lista actual', 'warning');
+        return;
+      }
+
+      custodioEditandoId = custodio.id;
+      document.getElementById('custodioNombres').value = custodio.nombres || '';
+      document.getElementById('custodioApellidos').value = custodio.apellidos || '';
+      document.getElementById('custodioCi').value = soloDigitos(custodio.ci || '');
+      document.getElementById('custodioTelefono').value = soloDigitos(custodio.telefono || '');
+      document.getElementById('custodioSubmitBtn').textContent = 'Guardar cambios';
+      showMessage('custodiosMessage', 'Editando Custodio', 'info');
+    }
+
+    // Elimina custodio tras confirmacion.
+    async function eliminarCustodio(encodedId) {
+      const id = decodeURIComponent(encodedId || '');
+      if (!isAdminUser()) {
+        showMessage('custodiosMessage', 'No tiene permisos para eliminar custodios', 'error');
+        return;
+      }
+
+      if (!confirm('¿Eliminar Custodio?')) {
+        return;
+      }
+
+      try {
+        const response = await obtenerApiResponse(`/api/custodios/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: {
+            'X-User-Role': currentUser?.role || '',
+            'X-User-Name': currentUser?.username || ''
+          }
+        });
+        const parsed = await leerJsonSeguro(response);
+
+        if (!parsed.ok) {
+          showMessage('custodiosMessage', `Respuesta inválida del servidor (${response.status}).`, 'error');
+          return;
+        }
+
+        const data = parsed.data;
+
+        if (!response.ok || data.error) {
+          showMessage('custodiosMessage', data.error || data.mensaje || 'No se pudo eliminar custodio', 'error');
+          return;
+        }
+
+        showMessage('custodiosMessage', data.mensaje || 'Custodio eliminado correctamente', 'success');
+        if (custodioEditandoId === id) {
+          resetFormularioCustodio();
+        }
+        cargarCustodios();
+        cargarListasCustodia();
+      } catch (error) {
+        showMessage('custodiosMessage', 'Error al eliminar custodio: ' + error.message, 'error');
+      }
+    }
+
+    // Limpia formulario de custodios y vuelve a modo creacion.
+    function resetFormularioCustodio() {
+      custodioEditandoId = null;
+      const form = document.getElementById('custodioForm');
+      if (form) {
+        form.reset();
+      }
+      const submitBtn = document.getElementById('custodioSubmitBtn');
+      if (submitBtn) {
+        submitBtn.textContent = 'Crear custodio';
+      }
+    }
+
+    async function cargarVehiculosAdmin() {
+      if (!isAdminUser()) {
+        return;
+      }
+
+      try {
+        const response = await obtenerApiResponse('/api/vehiculos');
+        const parsed = await leerJsonSeguro(response);
+
+        if (!parsed.ok) {
+          if (response.status === 404) {
+            showMessage('vehiculosMessage', 'El endpoint de vehículos no está activo. Reinicie el servidor con npm start.', 'warning');
+            return;
+          }
+          showMessage('vehiculosMessage', `Respuesta inválida del servidor (${response.status}).`, 'error');
+          return;
+        }
+
+        const data = parsed.data;
+        if (!response.ok || data.error) {
+          showMessage('vehiculosMessage', data.error || 'No se pudo cargar vehículos', 'error');
+          return;
+        }
+
+        vehiculosAdminCache = Array.isArray(data) ? data : [];
+        renderTablaVehiculos(vehiculosAdminCache);
+      } catch (error) {
+        showMessage('vehiculosMessage', 'Error al cargar vehículos: ' + error.message, 'error');
+      }
+    }
+
+    function renderTablaVehiculos(vehiculos) {
+      const container = document.getElementById('vehiculosTable');
+
+      if (!vehiculos.length) {
+        container.innerHTML = '<div class="message warning">No hay vehículos registrados</div>';
+        return;
+      }
+
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>Placa</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      vehiculos.forEach((vehiculo) => {
+        const encodedId = encodeURIComponent(vehiculo.id || '');
+        html += `
+          <tr>
+            <td>${escapeHtml(vehiculo.placa || '-')}</td>
+            <td>
+              <div class="table-actions">
+                <button class="btn btn-warning" onclick="editarVehiculo('${encodedId}')">Editar</button>
+                <button class="btn btn-danger" onclick="eliminarVehiculo('${encodedId}')">Eliminar</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    async function guardarVehiculo(event) {
+      event.preventDefault();
+
+      if (!isAdminUser()) {
+        showMessage('vehiculosMessage', 'No tiene permisos para gestionar vehículos', 'error');
+        return;
+      }
+
+      const payload = {
+        placa: String(document.getElementById('vehiculoPlaca').value || '').trim().toUpperCase()
+      };
+
+      if (!payload.placa) {
+        showMessage('vehiculosMessage', 'La placa es obligatoria', 'warning');
+        return;
+      }
+
+      const endpoint = vehiculoEditandoId
+        ? `/api/vehiculos/${encodeURIComponent(vehiculoEditandoId)}`
+        : '/api/vehiculos';
+      const method = vehiculoEditandoId ? 'PUT' : 'POST';
+
+      try {
+        const response = await obtenerApiResponse(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const parsed = await leerJsonSeguro(response);
+
+        if (!parsed.ok) {
+          showMessage('vehiculosMessage', `Respuesta inválida del servidor (${response.status}).`, 'error');
+          return;
+        }
+
+        const data = parsed.data;
+        if (!response.ok || data.error) {
+          showMessage('vehiculosMessage', data.error || data.mensaje || 'No se pudo guardar vehículo', 'error');
+          return;
+        }
+
+        showMessage('vehiculosMessage', data.mensaje || (vehiculoEditandoId ? 'Vehículo actualizado correctamente' : 'Vehículo creado correctamente'), 'success');
+        resetFormularioVehiculo();
+        cargarVehiculosAdmin();
+        cargarListasCustodia();
+        mostrarPedidos();
+      } catch (error) {
+        showMessage('vehiculosMessage', 'Error al guardar vehículo: ' + error.message, 'error');
+      }
+    }
+
+    function editarVehiculo(encodedId) {
+      const id = decodeURIComponent(encodedId || '');
+      const vehiculo = vehiculosAdminCache.find((item) => String(item.id || '') === id);
+
+      if (!vehiculo) {
+        showMessage('vehiculosMessage', 'Vehículo no encontrado en la lista actual', 'warning');
+        return;
+      }
+
+      vehiculoEditandoId = vehiculo.id;
+      document.getElementById('vehiculoPlaca').value = vehiculo.placa || '';
+      document.getElementById('vehiculoSubmitBtn').textContent = 'Guardar cambios';
+      showMessage('vehiculosMessage', 'Editando Vehículo', 'info');
+    }
+
+    async function eliminarVehiculo(encodedId) {
+      const id = decodeURIComponent(encodedId || '');
+      if (!isAdminUser()) {
+        showMessage('vehiculosMessage', 'No tiene permisos para eliminar vehículos', 'error');
+        return;
+      }
+
+      if (!confirm('¿Eliminar Vehículo?')) {
+        return;
+      }
+
+      try {
+        const response = await obtenerApiResponse(`/api/vehiculos/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+          headers: {
+            'X-User-Role': currentUser?.role || '',
+            'X-User-Name': currentUser?.username || ''
+          }
+        });
+        const parsed = await leerJsonSeguro(response);
+
+        if (!parsed.ok) {
+          showMessage('vehiculosMessage', `Respuesta inválida del servidor (${response.status}).`, 'error');
+          return;
+        }
+
+        const data = parsed.data;
+        if (!response.ok || data.error) {
+          showMessage('vehiculosMessage', data.error || data.mensaje || 'No se pudo eliminar vehículo', 'error');
+          return;
+        }
+
+        showMessage('vehiculosMessage', data.mensaje || 'Vehículo eliminado correctamente', 'success');
+        if (vehiculoEditandoId === id) {
+          resetFormularioVehiculo();
+        }
+        cargarVehiculosAdmin();
+        cargarListasCustodia();
+      } catch (error) {
+        showMessage('vehiculosMessage', 'Error al eliminar vehículo: ' + error.message, 'error');
+      }
+    }
+
+    function resetFormularioVehiculo() {
+      vehiculoEditandoId = null;
+      const form = document.getElementById('vehiculoForm');
+      if (form) {
+        form.reset();
+      }
+      const submitBtn = document.getElementById('vehiculoSubmitBtn');
+      if (submitBtn) {
+        submitBtn.textContent = 'Crear vehículo';
+      }
+    }
+
+    // Carga los indicadores principales del dashboard.
+    function loadDashboard(showSuccessMessage = false) {
+      const pedidosUrl = `/api/pedidos?_ts=${Date.now()}`;
+
+      const renderDashboard = pedidoData => {
+        const statsGrid = document.getElementById('statsGrid');
+        const rows = Array.isArray(pedidoData) ? pedidoData : [];
+
+        let pendientes = 0;
+        let finalizados = 0;
+        let enProceso = 0;
+
+        rows.forEach((item) => {
+          const estado = getEstadoOperativoPedido(item);
+          if (estado === 'PENDIENTE') pendientes += 1;
+          else if (estado === 'FINALIZADO') finalizados += 1;
+          else enProceso += 1;
+        });
+
+        const pendientesClass = pendientes > 0 ? 'alert-red' : '';
+        const finalizadosClass = finalizados > 0 ? 'alert-green' : '';
+        const enProcesoClass = enProceso > 0 ? 'alert-yellow' : '';
+
+        statsGrid.innerHTML = `
+          <div class="stat-card">
+            <div class="stat-value">${rows.length}</div>
+            <div class="stat-label">Total Pedidos</div>
+          </div>
+          <div class="stat-card ${enProcesoClass}">
+            <div class="stat-value">${enProceso}</div>
+            <div class="stat-label">En Proceso</div>
+          </div>
+          <div class="stat-card ${pendientesClass}">
+            <div class="stat-value">${pendientes}</div>
+            <div class="stat-label">Pendiente</div>
+          </div>
+          <div class="stat-card ${finalizadosClass}">
+            <div class="stat-value">${finalizados}</div>
+            <div class="stat-label">Finalizado</div>
+          </div>
+        `;
+
+        // Al refrescar dashboard también se refresca el bloque de alertas.
+        mostrarAlertasDashboard(false);
+
+        if (showSuccessMessage) {
+          showMessage('dashboardMessage', 'Dashboard actualizado', 'success');
+        }
+      };
+
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(renderDashboard)
+          .withFailureHandler(error => {
+            showMessage('statsGrid', 'Error al cargar dashboard: ' + error, 'error');
+          }).obtenerPedidos();
+      } else {
+        obtenerJsonConFallback([pedidosUrl, `/api/stock?_ts=${Date.now()}`], { cache: 'no-store' })
+          .then(data => {
+            if (data.error) {
+              showMessage('statsGrid', data.error, 'error');
+              return;
+            }
+            renderDashboard(data);
+          })
+          .catch(error => {
+            showMessage('statsGrid', 'Error al cargar dashboard: ' + error.message, 'error');
+          });
+      }
+    }
+
+    // Devuelve valores por defecto para unidades y grupos de pedidos.
+    function getListasPorDefecto() {
+      return {
+        // Tipos de custodia definidos en pedidos.html; actualizar aquí si se agregan nuevos.
+        unidades: ["Fluvial", "Interna", "Externa", "Hombre en Cabina"],
+        grupos: ["Fluvial", "Interna", "Externa", "Hombre en Cabina"]
+      };
+    }
+
+    // Rellena los selects de unidades y grupos en el formulario de pedidos.
+    function cargarSelects(unidades, grupos) {
+      const destinoField = document.getElementById("unidadProd");
+      const grupoSelect = document.getElementById("grupoProd");
+
+      // Destino ahora es campo manual; solo se autocompleta si sigue siendo select por compatibilidad.
+      if (destinoField && destinoField.tagName === 'SELECT') {
+        destinoField.innerHTML = "";
+        unidades.forEach(u => {
+          destinoField.innerHTML += `<option value="${u}">${u}</option>`;
+        });
+      }
+
+      if (!grupoSelect) return;
+      grupoSelect.innerHTML = "";
+      grupos.forEach(g => {
+        grupoSelect.innerHTML += `<option value="${g}">${g}</option>`;
+      });
+    }
+
+    // Pinta opciones en un datalist sin alterar valores ya escritos por el usuario.
+    function fillDatalist(datalistId, values) {
+      const datalist = document.getElementById(datalistId);
+      if (!datalist) return;
+
+      datalist.innerHTML = '';
+      (values || []).forEach((value) => {
+        const option = document.createElement('option');
+        option.value = value;
+        datalist.appendChild(option);
+      });
+    }
+
+    // Abre Custodia con el ID del pedido recién registrado ya cargado y bloqueado.
+    function abrirCustodiaConPedidoId(pedidoId) {
+      showTab('custodia', { bloquearPedidoId: true });
+
+      const aplicarPedidoId = () => {
+        const pedidoIdInput = document.getElementById('pedidoIdCustodia');
+        if (pedidoIdInput && pedidoId) {
+          pedidoIdInput.value = String(pedidoId);
+          pedidoIdInput.readOnly = true;
+
+          const jefeInput = document.getElementById('jefePatrullaCustodia');
+          if (jefeInput) {
+            jefeInput.focus();
+          }
+        }
+      };
+
+      // Carga listas y luego aplica el ID para evitar condiciones de carrera.
+      Promise.resolve(cargarListasCustodia()).finally(aplicarPedidoId);
+    }
+
+    // Carga jefes/custodios/placas desde Excel para la pestaña Custodia.
+    function cargarListasCustodia() {
+      return obtenerJsonConFallback(['/api/custodias/listas', '/api/custodia/listas'])
+        .then((data) => {
+          if (data.error) {
+            return;
+          }
+
+          custodiasCache = {
+            custodios: Array.isArray(data.custodios) ? data.custodios : [],
+            vehiculos: Array.isArray(data.vehiculos) ? data.vehiculos : [],
+            pedidoIds: Array.isArray(data.pedidoIds) ? data.pedidoIds : []
+          };
+
+          fillDatalist('listaPedidoIds', custodiasCache.pedidoIds);
+          fillDatalist('listaJefePatrulla', custodiasCache.custodios);
+          fillDatalist('listaCustodio2', custodiasCache.custodios);
+          fillDatalist('listaCustodio3', custodiasCache.custodios);
+          fillDatalist('listaVehiculos', custodiasCache.vehiculos);
+
+          const pedidoIdInput = document.getElementById('pedidoIdCustodia');
+          if (pedidoIdInput && !pedidoIdInput.value && custodiasCache.pedidoIds.length) {
+            const ultimoId = custodiasCache.pedidoIds
+              .map(id => Number(id))
+              .filter(n => Number.isFinite(n))
+              .sort((a, b) => b - a)[0];
+
+            if (Number.isFinite(ultimoId)) {
+              pedidoIdInput.value = String(ultimoId);
+            }
+          }
+        })
+        .catch(() => {
+          // Si falla, la pantalla sigue operativa con entrada manual.
+        });
+    }
+
+    // Obtiene listas desde API y mantiene fallback local por defecto.
+    function loadListas() {
+      const defaults = getListasPorDefecto();
+
+      // Muestra opciones de inmediato para que los select nunca queden vacios.
+      cargarSelects(defaults.unidades, defaults.grupos);
+
+      const cargarConDatos = (data) => {
+        // Destino es manual: mantenemos defaults como referencia, pero no sobreescribimos input.
+        const unidades = Array.isArray(data?.unidades) && data.unidades.length ? data.unidades : defaults.unidades;
+
+        // Tipo de Custodia se mantiene fijo por requerimiento funcional.
+        const grupos = defaults.grupos;
+        cargarSelects(unidades, grupos);
+      };
+
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(cargarConDatos)
+            .withFailureHandler(error => {
+              console.error('Error loading lists from Apps Script:', error);
+              cargarSelects(defaults.unidades, defaults.grupos);
+            }).obtenerListas();
+      } else {
+        obtenerApiResponse('/api/listas')
+          .then(response => response.json())
+          .then(cargarConDatos)
+          .catch(error => {
+            console.warn('Error loading listas desde API local:', error);
+            cargarSelects(defaults.unidades, defaults.grupos);
+          });
+      }
+    }
+
+    // Carga clientes únicos desde inventario para el filtro de reportes.
+    function loadClientesReporte() {
+      const select = document.getElementById('filtroCliente');
+      if (!select) return;
+
+      const poblar = (pedidoData) => {
+        const rows = Array.isArray(pedidoData) ? pedidoData : [];
+        const clientes = Array.from(new Set(
+          rows
+            .map(item => String(item?.codigo || '').trim())
+            .filter(Boolean)
+        )).sort((a, b) => a.localeCompare(b));
+
+        const valorActual = select.value;
+        select.innerHTML = '<option value="">Todos los clientes</option>';
+        clientes.forEach((cliente) => {
+          const option = document.createElement('option');
+          option.value = cliente;
+          option.textContent = cliente;
+          select.appendChild(option);
+        });
+
+        if (valorActual && clientes.includes(valorActual)) {
+          select.value = valorActual;
+        }
+      };
+
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(poblar)
+          .withFailureHandler(() => {
+            // Si falla, el filtro sigue operativo con "Todos los clientes".
+          }).obtenerPedidos();
+      } else {
+        obtenerJsonConFallback([
+          `/api/pedidos?_ts=${Date.now()}`,
+          `/api/stock?_ts=${Date.now()}`
+        ], { cache: 'no-store' })
+          .then(poblar)
+          .catch(() => {
+            // Si falla, el filtro sigue operativo con "Todos los clientes".
+          });
+      }
+    }
+
+    // Envía al backend un nuevo pedido y muestra retroalimentación.
+    function registrarPedido(event) {
+      event.preventDefault();
+      const esEdicion = Boolean(pedidoEditandoId);
+      
+      const pedido = {
+        codigo: document.getElementById("codigoProd").value.trim().toUpperCase(),
+        nombre: document.getElementById("nombreProd").value.trim(),
+        unidad: document.getElementById("unidadProd").value,
+        grupo: document.getElementById("grupoProd").value,
+        guia: document.getElementById("guiaPedido").value.trim(),
+        fecha: document.getElementById("fechaPedido").value,
+        hora: document.getElementById('horaPedido').value,
+        estado: document.getElementById("estadoPedido").value
+      };
+
+      if (!pedido.codigo || !pedido.nombre) {
+        showMessage('msgProd', 'Cliente y lugar son campos obligatorios', 'error');
+        return;
+      }
+
+      const mostrarResultado = (mensaje, pedidoId = '') => {
+        const nivel = mensaje.includes('correctamente') ? 'success' : 'error';
+        showMessage('msgProd', mensaje, nivel);
+        if (nivel === 'success') {
+          limpiarFormPedido();
+          mostrarPedidos();
+          loadDashboard();
+          loadListas();
+
+          if (esEdicion) {
+            showTab('inventario');
+          } else {
+            abrirCustodiaConPedidoId(pedidoId);
+          }
+        }
+      };
+
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler((result) => {
+          if (typeof result === 'string') {
+            const pedidoId = (result.match(/ID Pedido:\s*(\d+)/i)?.[1] || '');
+            mostrarResultado(result, pedidoId);
+            return;
+          }
+
+          const mensaje = result?.mensaje || 'Operación completada';
+          const pedidoId = result?.pedidoId || ((mensaje || '').match(/ID Pedido:\s*(\d+)/i)?.[1] || '');
+          mostrarResultado(mensaje, pedidoId);
+        })
+            .withFailureHandler(error => {
+              showMessage('msgProd', 'Error: ' + error, 'error');
+            }).registrarPedido(pedido);
+      } else {
+        const endpoint = pedidoEditandoId
+          ? `/api/pedidos/${encodeURIComponent(pedidoEditandoId)}`
+          : '/api/pedidos';
+        const method = pedidoEditandoId ? 'PUT' : 'POST';
+
+        fetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pedido)
+        })
+          .then(response => response.json())
+          .then(data => {
+            if (data.error) {
+              showMessage('msgProd', data.error, 'error');
+            } else {
+              const pedidoId = data.pedidoId || ((data.mensaje || '').match(/ID Pedido:\s*(\d+)/i)?.[1] || '');
+              mostrarResultado(data.mensaje, pedidoId);
+            }
+          })
+          .catch(error => {
+            showMessage('msgProd', 'Error: ' + error.message, 'error');
+          });
+      }
+    }
+
+    // Envía al backend los datos de custodia del pedido.
+    function registrarCustodia(event) {
+      event.preventDefault();
+
+      const pedidoId = document.getElementById("pedidoIdCustodia").value.trim();
+      const jefePatrulla = document.getElementById("jefePatrullaCustodia").value.trim();
+      const custodio2 = document.getElementById("custodio2Custodia").value.trim();
+      const custodio3 = document.getElementById("custodio3Custodia").value.trim();
+      const placa = document.getElementById("placaVehiculoCustodia").value.trim();
+      const observacionesBase = document.getElementById("observacionesCustodia").value.trim();
+      const fechaRegistro = new Date().toISOString().slice(0, 10);
+
+      const observacionesCustodia = [
+        `Custodio 2: ${custodio2}`,
+        `Custodio 3: ${custodio3}`,
+        `Placa: ${placa}`,
+        observacionesBase ? `Notas: ${observacionesBase}` : ''
+      ].filter(Boolean).join(' | ');
+      
+      const custodia = {
+        codigo: pedidoId,
+        fecha: fechaRegistro,
+        tipo: 'CUSTODIA',
+        cantidad: 1,
+        observaciones: observacionesCustodia,
+        pedidoId,
+        jefePatrulla,
+        custodio2,
+        custodio3,
+        placa
+      };
+
+      if (!pedidoId || !jefePatrulla || !custodio2 || !custodio3 || !placa) {
+        showMessage('msgCustodia', 'El ID del pedido, el jefe de patrulla, el custodio 2, el custodio 3 y la placa son obligatorios.', 'error');
+        return;
+      }
+
+      const mostrarResultado = mensaje => {
+        const nivel = mensaje.includes('correctamente') ? 'success' : 'error';
+        showMessage('msgCustodia', mensaje, nivel);
+        if (nivel === 'success') {
+          document.getElementById('formCustodia').reset();
+        }
+      };
+
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(mostrarResultado)
+            .withFailureHandler(error => {
+              showMessage('msgCustodia', 'Error: ' + error, 'error');
+            }).registrarCustodia(custodia);
+      } else {
+        obtenerJsonConFallback(['/api/custodias', '/api/movimientos'], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(custodia)
+        })
+          .then(data => {
+            if (data.error) {
+              showMessage('msgCustodia', data.error, 'error');
+            } else {
+              mostrarResultado(data.mensaje);
+            }
+          })
+          .catch(error => {
+            showMessage('msgCustodia', 'Error: ' + error.message, 'error');
+          });
+      }
+    }
+
+    // Ejecuta búsqueda de pedidos y renderiza resultados.
+    function buscarPedido() {
+      const texto = document.getElementById("buscarTexto").value.trim().toLowerCase();
+      if (!texto) {
+        showMessage('resultadosBusqueda', 'Ingrese un texto para buscar', 'warning');
+        return;
+      }
+
+      // Función que filtra localmente sobre el array completo de pedidos.
+      // Busca en: cliente (codigo), nombre/lugar, grupo, guia, pedidoId, jefePatrulla.
+      const filtrarLocalmente = (todos) => {
+        const norm = (v) => String(v || '').trim().toLowerCase();
+        const resultados = todos.filter(p =>
+          norm(p.codigo).includes(texto) ||
+          norm(p.nombre).includes(texto) ||
+          norm(p.grupo).includes(texto) ||
+          norm(p.guia).includes(texto) ||
+          norm(p.pedidoId).includes(texto) ||
+          norm(p.jefePatrulla).includes(texto)
+        );
+        displaySearchResults(resultados);
+      };
+
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(filtrarLocalmente)
+          .withFailureHandler(error => {
+            showMessage('resultadosBusqueda', 'Error en la búsqueda: ' + error, 'error');
+          }).obtenerPedidos();
+      } else {
+        // Si ya hay datos en caché los usamos directamente (sin petición extra).
+        if (pedidosCache && pedidosCache.length > 0) {
+          filtrarLocalmente(pedidosCache);
+          return;
+        }
+        // Si no hay caché, pedimos los mismos datos que usa Inventario.
+        obtenerJsonConFallback([
+          `/api/pedidos?_ts=${Date.now()}`,
+          `/api/stock?_ts=${Date.now()}`
+        ], { cache: 'no-store' })
+          .then(data => {
+            pedidosCache = Array.isArray(data) ? data : [];
+            filtrarLocalmente(pedidosCache);
+          })
+          .catch(error => {
+            showMessage('resultadosBusqueda', 'Error en la búsqueda: ' + error.message, 'error');
+          });
+      }
+    }
+
+    // Aplica debounce para búsqueda en tiempo real.
+    function buscarEnTiempoReal() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        const texto = document.getElementById("buscarTexto").value.trim();
+        if (texto.length >= 2) {
+          buscarPedido();
+        } else if (texto.length === 0) {
+          document.getElementById('resultadosBusqueda').innerHTML = '';
+        }
+      }, 300);
+    }
+
+    // Renderiza la tabla de resultados de búsqueda de pedidos.
+    function displaySearchResults(data) {
+      // Reutiliza renderTablaPedidos para mostrar exactamente las mismas columnas
+      // y acciones (Editar/Eliminar) que en la pestaña Inventario.
+      const container = document.getElementById('resultadosBusqueda');
+      if (data.length === 0) {
+        container.innerHTML = '<div class="message warning">No se encontraron pedidos</div>';
+        return;
+      }
+      renderTablaPedidos(data, container);
+    }
+
+    // Carga y muestra la tabla principal de pedidos.
+    function mostrarPedidos() {
+      const loading = document.getElementById("loading");
+      const container = getInventarioTableContainer();
+      const messageTarget = getInventarioMessageTarget();
+      const pedidosUrl = `/api/pedidos?_ts=${Date.now()}`;
+
+      if (!container) {
+        showMessage(messageTarget, 'No se encontró el contenedor de inventario', 'error');
+        return;
+      }
+
+      if (loading) {
+        loading.style.display = "block";
+      }
+      
+        const mostrarDatos = data => {
+          if (loading) {
+            loading.style.display = "none";
+          }
+          pedidosCache = Array.isArray(data) ? data : [];
+          renderTablaPedidos(data, container);
+        };
+
+        if (window.google && google.script && google.script.run) {
+          google.script.run.withSuccessHandler(mostrarDatos)
+              .withFailureHandler(error => {
+                if (loading) {
+                  loading.style.display = "none";
+                }
+                showMessage(messageTarget, 'Error al cargar pedidos: ' + error, 'error');
+              }).obtenerPedidos();
+        } else {
+        obtenerJsonConFallback([
+          pedidosUrl,
+          `/api/stock?_ts=${Date.now()}`
+        ], { cache: 'no-store' })
+            .then(mostrarDatos)
+            .catch(error => {
+              if (loading) {
+                loading.style.display = "none";
+              }
+              showMessage(messageTarget, 'Error al cargar pedidos: ' + error.message, 'error');
+            });
+        }
+    }
+
+    // Construye la tabla de pedidos con las columnas del dominio de custodia.
+    function renderTablaPedidos(data, container) {
+      if (!container) return;
+      if (!data || data.length === 0) {
+        container.innerHTML = '<div class="message warning">No hay pedidos registrados</div>';
+        return;
+      }
+
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>ID Pedido</th>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Lugar</th>
+              <th>Destino</th>
+              <th>Tipo de Custodia</th>
+              <th># Guía</th>
+              <th>Jefe Patrulla</th>
+              <th>Custodio 2</th>
+              <th>Custodio 3</th>
+              <th>Placa Vehículo</th>
+              <th>Hora</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      data.forEach(pedido => {
+        const pedidoId = String(pedido.pedidoId || '').trim();
+        const pedidoIdSeg = encodeURIComponent(pedidoId);
+        const tienePedidoId = Boolean(pedidoId);
+        const puedeEliminar = isAdminUser();
+        const botonEliminar = !tienePedidoId
+          ? `<button class="btn btn-danger" title="Registro sin ID Pedido" disabled>Eliminar</button>`
+          : puedeEliminar
+          ? `<button class="btn btn-danger" onclick="eliminarPedidoDesdeInventario('${pedidoIdSeg}')" title="Eliminar pedido">Eliminar</button>`
+          : `<button class="btn btn-danger" title="Solo administrador" disabled>Eliminar</button>`;
+
+        html += `
+          <tr>
+            <td>${escapeHtml(pedidoId || '-')}</td>
+            <td>${escapeHtml(pedido.fecha || '-')}</td>
+            <td>${escapeHtml(pedido.codigo || '-')}</td>
+            <td>${escapeHtml(pedido.nombre || '-')}</td>
+            <td>${escapeHtml(pedido.unidad || '-')}</td>
+            <td>${escapeHtml(pedido.grupo || '-')}</td>
+            <td>${escapeHtml(pedido.guia || '-')}</td>
+            <td>${escapeHtml(pedido.jefePatrulla || '-')}</td>
+            <td>${escapeHtml(pedido.custodio2 || '-')}</td>
+            <td>${escapeHtml(pedido.custodio3 || '-')}</td>
+            <td>${escapeHtml(pedido.placaVehiculo || '-')}</td>
+            <td>${escapeHtml(pedido.hora || '-')}</td>
+            <td>${renderEstadoBadge(getEstadoOperativoPedido(pedido))}</td>
+            <td>
+              <button class="btn btn-warning" onclick="editarPedidoDesdeInventario('${pedidoIdSeg}')" title="Editar pedido" ${tienePedidoId ? '' : 'disabled'}>
+                Editar
+              </button>
+              ${botonEliminar}
+            </td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    // Filtra pedidos que aun requieren seguimiento operativo.
+    function mostrarAlertasPedidos() {
+      const loading = document.getElementById("loading");
+      const container = getInventarioTableContainer();
+      const messageTarget = getInventarioMessageTarget();
+      const pedidosUrl = `/api/pedidos?_ts=${Date.now()}`;
+
+      if (!container) {
+        showMessage(messageTarget, 'No se encontró el contenedor de inventario', 'error');
+        return;
+      }
+
+      if (loading) {
+        loading.style.display = "block";
+      }
+
+      const procesarAlertas = data => {
+        if (loading) {
+          loading.style.display = "none";
+        }
+        const alertProducts = data.filter((pedido) => {
+          const estado = getEstadoOperativoPedido(pedido);
+          return estado === 'PENDIENTE' || estado === 'EN PROCESO';
+        });
+        
+        if (alertProducts.length === 0) {
+          container.innerHTML = '<div class="message success">No hay pedidos pendientes o en proceso</div>';
+          return;
+        }
+        
+        renderTablaPedidos(alertProducts, container);
+      };
+
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(procesarAlertas)
+          .withFailureHandler(error => {
+            if (loading) {
+              loading.style.display = "none";
+            }
+            showMessage(messageTarget, 'Error: ' + error, 'error');
+          }).obtenerPedidos();
+      } else {
+        obtenerJsonConFallback([
+          pedidosUrl,
+          `/api/stock?_ts=${Date.now()}`
+        ], { cache: 'no-store' })
+          .then(procesarAlertas)
+          .catch(error => {
+            if (loading) {
+              loading.style.display = "none";
+            }
+            showMessage(messageTarget, 'Error: ' + error.message, 'error');
+          });
+      }
+    }
+
+    // Muestra resumen compacto de alertas dentro del dashboard.
+    function mostrarAlertasDashboard(showSuccessMessage = false) {
+      const pedidosUrl = `/api/pedidos?_ts=${Date.now()}`;
+
+      const renderAlerts = data => {
+        const alertProducts = data.filter((p) => {
+          const estado = getEstadoOperativoPedido(p);
+          return estado === 'PENDIENTE' || estado === 'EN PROCESO';
+        });
+        const container = document.getElementById('alertsContainer');
+        
+        if (alertProducts.length === 0) {
+          container.innerHTML = '<div class="message success">No hay pedidos pendientes o en proceso</div>';
+          if (showSuccessMessage) {
+            showMessage('dashboardMessage', 'Actualizado correctamente', 'success');
+          }
+          return;
+        }
+
+        let html = `
+          <div class="message warning">
+            <strong>${alertProducts.length} pedido(s) requieren atención</strong>
+          </div>
+          <table>
+            <thead>
+              <tr><th>ID Pedido</th><th>Fecha</th><th>Cliente</th><th>Lugar</th><th>Destino</th><th>Tipo de Custodia</th><th>Hora</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+        `;
+
+        alertProducts.forEach(p => {
+          const estado = getEstadoOperativoPedido(p);
+          const statusClass = estado === 'PENDIENTE' ? 'status-zero' : 'status-low';
+          
+          html += `
+            <tr class="${statusClass}">
+              <td>${escapeHtml(p.pedidoId || '-')}</td>
+              <td>${escapeHtml(p.fecha || '-')}</td>
+              <td>${escapeHtml(p.codigo || '-')}</td>
+              <td>${escapeHtml(p.nombre || '-')}</td>
+              <td>${escapeHtml(p.unidad || '-')}</td>
+              <td>${escapeHtml(p.grupo || '-')}</td>
+              <td>${escapeHtml(p.hora || '-')}</td>
+              <td>${renderEstadoBadge(estado)}</td>
+            </tr>
+          `;
+        });
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+        if (showSuccessMessage) {
+          showMessage('dashboardMessage', 'Actualizado correctamente', 'success');
+        }
+      };
+
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(renderAlerts)
+          .withFailureHandler(error => {
+            showMessage('alertsContainer', 'Error al cargar alertas: ' + error, 'error');
+          }).obtenerPedidos();
+      } else {
+        obtenerJsonConFallback([
+          pedidosUrl,
+          `/api/stock?_ts=${Date.now()}`
+        ], { cache: 'no-store' })
+          .then(renderAlerts)
+          .catch(error => {
+            showMessage('alertsContainer', 'Error al cargar alertas: ' + error.message, 'error');
+          });
+      }
+    }
+
+    // Genera reporte por cliente usando columnas de inventario (sin acciones).
+    function mostrarHistorial() {
+      const filtros = {
+        fechaDesde: document.getElementById("fechaDesde").value,
+        fechaHasta: document.getElementById("fechaHasta").value,
+        cliente: (document.getElementById("filtroCliente")?.value || '').trim()
+      };
+
+      if (!filtros.fechaDesde || !filtros.fechaHasta) {
+        showMessage('historialTable', 'Seleccione las fechas de consulta', 'warning');
+        return;
+      }
+
+      const normalizar = (valor) => String(valor || '').trim().toUpperCase();
+      const fechaDesde = new Date(`${filtros.fechaDesde}T00:00:00`);
+      const fechaHasta = new Date(`${filtros.fechaHasta}T23:59:59.999`);
+
+      const filtrarPedidos = (rows) => {
+        const pedidos = Array.isArray(rows) ? rows : [];
+        const clienteBuscado = normalizar(filtros.cliente);
+
+        return pedidos.filter((item) => {
+          const fechaRaw = String(item?.fecha || '').trim();
+          if (!fechaRaw) return false;
+
+          const fechaItem = new Date(`${fechaRaw}T12:00:00`);
+          if (Number.isNaN(fechaItem.getTime())) return false;
+          if (fechaItem < fechaDesde || fechaItem > fechaHasta) return false;
+
+          if (!clienteBuscado) return true;
+          return normalizar(item?.codigo) === clienteBuscado;
+        });
+      };
+
+      const procesar = (pedidoRows) => {
+        const filtrados = filtrarPedidos(pedidoRows);
+        displayHistorialTable(filtrados);
+      };
+
+      if (window.google && google.script && google.script.run) {
+        google.script.run.withSuccessHandler(procesar)
+          .withFailureHandler(error => {
+            showMessage('historialTable', 'Error: ' + error, 'error');
+          }).obtenerPedidos();
+      } else {
+        obtenerJsonConFallback([
+          `/api/pedidos?_ts=${Date.now()}`,
+          `/api/stock?_ts=${Date.now()}`
+        ], { cache: 'no-store' })
+          .then(procesar)
+          .catch(error => {
+            showMessage('historialTable', 'Error: ' + error.message, 'error');
+          });
+      }
+    }
+
+    // Renderiza reporte con columnas de inventario (sin acciones).
+    function displayHistorialTable(data) {
+      const container = document.getElementById('historialTable');
+      const rows = Array.isArray(data) ? data : [];
+
+      if (rows.length === 0) {
+        container.innerHTML = '<div class="message warning">No hay pedidos para el cliente y rango seleccionados</div>';
+        return;
+      }
+
+      let html = `
+        <div class="message success">Se encontraron ${rows.length} pedido(s)</div>
+        <table>
+          <thead>
+            <tr>
+              <th>ID Pedido</th>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Lugar</th>
+              <th>Destino</th>
+              <th>Tipo de Custodia</th>
+              <th># Guía</th>
+              <th>Jefe Patrulla</th>
+              <th>Custodio 2</th>
+              <th>Custodio 3</th>
+              <th>Placa Vehículo</th>
+              <th>Hora</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      rows.forEach((pedido) => {
+        html += `
+          <tr>
+            <td>${escapeHtml(pedido.pedidoId || '-')}</td>
+            <td>${escapeHtml(pedido.fecha || '-')}</td>
+            <td>${escapeHtml(pedido.codigo || '-')}</td>
+            <td>${escapeHtml(pedido.nombre || '-')}</td>
+            <td>${escapeHtml(pedido.unidad || '-')}</td>
+            <td>${escapeHtml(pedido.grupo || '-')}</td>
+            <td>${escapeHtml(pedido.guia || '-')}</td>
+            <td>${escapeHtml(pedido.jefePatrulla || '-')}</td>
+            <td>${escapeHtml(pedido.custodio2 || '-')}</td>
+            <td>${escapeHtml(pedido.custodio3 || '-')}</td>
+            <td>${escapeHtml(pedido.placaVehiculo || '-')}</td>
+            <td>${escapeHtml(pedido.hora || '-')}</td>
+            <td>${renderEstadoBadge(getEstadoOperativoPedido(pedido))}</td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    // Genera vista previa de pedidos como imagen para impresión PDF.
+    function exportarPedidos() {
+      const tableContainer = getInventarioTableContainer();
+      const messageTarget = getInventarioMessageTarget();
+      if (!tableContainer) {
+        showMessage(messageTarget, 'No se encontró la tabla de inventario', 'error');
+        return;
+      }
+      const table = tableContainer.querySelector('table');
+
+      if (!table) {
+        showMessage(messageTarget, 'Primero presione "Actualizar Pedidos" para generar la vista previa', 'warning');
+        return;
+      }
+
+      if (typeof html2canvas !== 'function') {
+        showMessage(messageTarget, 'No se pudo cargar el motor de vista previa', 'error');
+        return;
+      }
+
+      html2canvas(table, {
+        scale: 2,
+        backgroundColor: '#FFFFFF',
+        useCORS: true
+      }).then(canvas => {
+        const img = document.getElementById('pedidosPreviewImage');
+        img.src = canvas.toDataURL('image/png');
+        document.getElementById('pedidosPreviewModal').style.display = 'flex';
+      }).catch(error => {
+        showMessage(messageTarget, 'No se pudo crear la vista previa: ' + error.message, 'error');
+      });
+    }
+
+    // Cierra modal de vista previa de pedidos.
+    function cerrarVistaPreviaPedidos() {
+      document.getElementById('pedidosPreviewModal').style.display = 'none';
+    }
+
+    // Abre ventana de impresión de pedidos para guardar como PDF.
+    // Limpia formulario de registro de pedidos.
+    function limpiarFormPedido() {
+      document.getElementById('formProducto').reset();
+      document.getElementById("guiaPedido").value = '';
+      document.getElementById('fechaPedido').value = new Date().toISOString().slice(0, 10);
+      const ahora = new Date();
+      document.getElementById('horaPedido').value = `${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`;
+      document.getElementById('estadoPedido').value = 'PENDIENTE';
+      pedidoEditandoId = null;
+      document.getElementById('productSubmitBtn').textContent = 'Siguiente';
+      document.getElementById('msgProd').innerHTML = '';
+    }
+
+    // Limpia formulario de custodia.
+    function limpiarFormCustodia() {
+      document.getElementById('formCustodia').reset();
+      document.getElementById('msgCustodia').innerHTML = '';
+    }
+
+    // Limpia campo y resultados de búsqueda de pedidos.
+    function limpiarBusqueda() {
+      document.getElementById("buscarTexto").value = "";
+      document.getElementById("resultadosBusqueda").innerHTML = "";
+    }
+
+    // Inicializa las hojas y columnas del Excel si no existen.
+    async function configurarBD() {
+      const resultDiv = document.getElementById('configResults');
+      resultDiv.innerHTML = '<div class="message info">Verificando estructura del Excel...</div>';
+
+      try {
+        const response = await obtenerApiResponse('/api/configurar-bd', { method: 'POST' });
+        const contentType = (response.headers.get('content-type') || '').toLowerCase();
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            showMessage(
+              'configResults',
+              'El endpoint de Configuracion BD no existe en el servidor activo. Reinicie el servidor (Ctrl+C y npm start) para cargar los cambios.',
+              'warning'
+            );
+            return;
+          }
+
+          const body = await response.text();
+          showMessage('configResults', `Error HTTP ${response.status}: ${body.slice(0, 120)}`, 'error');
+          return;
+        }
+
+        if (!contentType.includes('application/json')) {
+          const body = await response.text();
+          showMessage(
+            'configResults',
+            `Respuesta no valida del servidor. Reinicie el servidor y reintente. Detalle: ${body.slice(0, 120)}`,
+            'warning'
+          );
+          return;
+        }
+
+        const data = await response.json();
+        if (data.error) {
+          showMessage('configResults', 'Error: ' + data.error, 'error');
+        } else {
+          showMessage('configResults', data.mensaje, 'success');
+        }
+      } catch (error) {
+        showMessage('configResults', 'Error al conectar con el servidor: ' + error.message, 'error');
+      }
+    }
+
+    // Abre o cierra paneles de Configuración sin afectar el resto de la UI.
+    function toggleConfigSection(bodyId, headerEl) {
+      const body = document.getElementById(bodyId);
+      if (!body || !headerEl) return;
+
+      const collapsed = body.classList.contains('collapsed');
+      body.classList.toggle('collapsed', !collapsed);
+      headerEl.setAttribute('aria-expanded', String(collapsed));
+
+      const icon = headerEl.querySelector('.config-toggle-icon');
+      if (icon) {
+        icon.textContent = collapsed ? '-' : '+';
+      }
+    }
+
+    // Muestra mensajes de estado en contenedores de la UI.
+    function showMessage(containerId, message, type) {
+      const container = document.getElementById(containerId);
+      let className = 'message';
+      
+      switch(type) {
+        case 'success':
+          className += ' success';
+          break;
+        case 'error':
+          className += ' error';
+          break;
+        case 'warning':
+          className += ' warning';
+          break;
+        case 'info':
+          className += ' info';
+          break;
+        default:
+          className += ' success';
+      }
+      
+      container.innerHTML = `<div class="${className}">${message}</div>`;
+      
+      if (type === 'success') {
+        setTimeout(() => {
+          container.innerHTML = '';
+        }, 5000);
+      }
+    }
+
+    // Carga un pedido en el formulario para editarlo desde la pestaña Inventario.
+    function editarPedidoDesdeInventario(encodedPedidoId) {
+      const pedidoId = decodeURIComponent(encodedPedidoId || '');
+      const messageTarget = getInventarioMessageTarget();
+      const pedido = pedidosCache.find((item) => String(item.pedidoId || '') === pedidoId);
+
+      if (!pedido) {
+        showMessage(messageTarget, 'No se encontró el pedido seleccionado', 'error');
+        return;
+      }
+
+      pedidoEditandoId = pedidoId;
+
+      document.getElementById('codigoProd').value = pedido.codigo;
+      document.getElementById('nombreProd').value = pedido.nombre;
+      document.getElementById('unidadProd').value = pedido.unidad || 'Unidades';
+      document.getElementById('grupoProd').value = pedido.grupo || 'General';
+      document.getElementById('guiaPedido').value = pedido.guia || '';
+      document.getElementById('fechaPedido').value = pedido.fecha || '';
+      document.getElementById('horaPedido').value = pedido.hora || '';
+      document.getElementById('estadoPedido').value = pedido.estado || 'PENDIENTE';
+      document.getElementById('productSubmitBtn').textContent = 'Guardar cambios';
+
+      showTab('pedidos');
+      showMessage('msgProd', `Editando pedido ID ${pedidoId}. Presione "Guardar cambios" para actualizar.`, 'info');
+    }
+
+    // Elimina pedido desde inventario; solo permitido para administradores.
+    function eliminarPedidoDesdeInventario(encodedPedidoId) {
+      const pedidoId = decodeURIComponent(encodedPedidoId || '');
+      const messageTarget = getInventarioMessageTarget();
+
+      if (!isAdminUser()) {
+        showMessage(messageTarget, 'Solo un administrador puede eliminar pedidos', 'error');
+        return;
+      }
+
+      if (!confirm(`¿Eliminar el pedido ID ${pedidoId}? También se eliminarán sus movimientos de custodia asociados.`)) {
+        return;
+      }
+
+      fetch(`/api/pedidos/${encodeURIComponent(pedidoId)}`, {
+        method: 'DELETE',
+        headers: {
+          'X-User-Role': currentUser?.role || '',
+          'X-User-Name': currentUser?.username || ''
+        }
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.error) {
+            showMessage(messageTarget, data.error, 'error');
+            return;
+          }
+
+          // Eliminar del cache y re-renderizar inmediatamente sin esperar re-fetch
+          const idx = pedidosCache.findIndex(p => String(p.pedidoId || '') === pedidoId);
+          if (idx !== -1) pedidosCache.splice(idx, 1);
+          const stCont = getInventarioTableContainer();
+          if (stCont) renderTablaPedidos(pedidosCache, stCont);
+
+          if (pedidoEditandoId === pedidoId) {
+            limpiarFormPedido();
+          }
+
+          // Sincronizar en segundo plano para mantener datos frescos
+          mostrarPedidos();
+          loadDashboard();
+          loadListas();
+        })
+        .catch(error => {
+          showMessage(messageTarget, 'Error al eliminar pedido: ' + error.message, 'error');
+        });
+    }
+
+
+
+    // Genera vista previa de reporte como imagen para impresión PDF.
+    function exportarReporte() {
+      const tableContainer = document.getElementById('historialTable');
+      const table = tableContainer.querySelector('table');
+
+      if (!table) {
+        showMessage('historialTable', 'Primero presione "Generar Reporte" para crear la vista previa', 'warning');
+        return;
+      }
+
+      if (typeof html2canvas !== 'function') {
+        showMessage('historialTable', 'No se pudo cargar el motor de vista previa', 'error');
+        return;
+      }
+
+      html2canvas(table, {
+        scale: 2,
+        backgroundColor: '#FFFFFF',
+        useCORS: true
+      }).then(canvas => {
+        const img = document.getElementById('reportePreviewImage');
+        img.src = canvas.toDataURL('image/png');
+        document.getElementById('reportePreviewModal').style.display = 'flex';
+      }).catch(error => {
+        showMessage('historialTable', 'No se pudo crear la vista previa: ' + error.message, 'error');
+      });
+    }
+
+    // Cierra modal de vista previa del reporte.
+    function cerrarVistaPreviaReporte() {
+      document.getElementById('reportePreviewModal').style.display = 'none';
+    }
+
+    // Abre impresión del reporte para exportación a PDF.
+    function imprimirReportePDF() {
+      const imgSrc = document.getElementById('reportePreviewImage').src;
+      if (!imgSrc) {
+        showMessage('historialTable', 'No hay vista previa disponible para imprimir', 'warning');
+        return;
+      }
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        showMessage('historialTable', 'El navegador bloqueó la ventana de impresión', 'error');
+        return;
+      }
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Reporte de Pedidos - Vista para PDF</title>
+            <style>
+              body { margin: 0; padding: 16px; background: #fff; font-family: Arial, sans-serif; }
+              img { width: 100%; height: auto; display: block; }
+              @page { size: A4 landscape; margin: 10mm; }
+            </style>
+          </head>
+          <body>
+            <img src="${imgSrc}" alt="Reporte de pedidos">
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+
+      setTimeout(() => {
+        printWindow.print();
+      }, 300);
+
+      cerrarVistaPreviaReporte();
+      showMessage('historialTable', 'Vista previa lista. Seleccione "Guardar como PDF" en impresión', 'success');
+    }
+
+    document.addEventListener('keydown', function(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        
+        switch(currentTab) {
+          case 'pedidos':
+            document.getElementById('formProducto').dispatchEvent(new Event('submit'));
+            break;
+          case 'custodia':
+            document.getElementById('formCustodia').dispatchEvent(new Event('submit'));
+            break;
+        }
+      }
+      
+      if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+        event.preventDefault();
+        
+        switch(currentTab) {
+          case 'dashboard':
+            loadDashboard();
+            break;
+          case 'inventario':
+            mostrarPedidos();
+            break;
+        }
+      }
+    });
+  </script>
+</body>
+</html>

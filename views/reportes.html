@@ -1,0 +1,38 @@
+<!-- Vista parcial: Reportes -->
+<div class="content-header">
+  <h2>Reportes y Análisis</h2>
+</div>
+<div class="content-body">
+  <div class="card">
+    <div class="card-header">Reporte de Pedidos</div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="fechaDesde">Fecha Desde</label>
+          <input id="fechaDesde" type="date" required>
+        </div>
+        <div class="form-group">
+          <label for="fechaHasta">Fecha Hasta</label>
+          <input id="fechaHasta" type="date" required>
+        </div>
+        <div class="form-group">
+          <label for="filtroCliente">Filtrar por Cliente</label>
+          <select id="filtroCliente">
+            <option value="">Todos los clientes</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="mostrarHistorial()">
+          Generar Reporte
+        </button>
+        <button class="btn btn-success" onclick="exportarReporte()">
+          Imprimir Reporte PDF
+        </button>
+      </div>
+      <div class="table-container">
+        <div id="historialTable"></div>
+      </div>
+    </div>
+  </div>
+</div>

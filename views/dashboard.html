@@ -1,0 +1,22 @@
+<!-- Vista parcial: Dashboard -->
+<div class="content-header">
+  <h2>Dashboard General</h2>
+</div>
+<div class="content-body">
+  <div class="stats-grid" id="statsGrid"></div>
+  <div class="card">
+    <div class="card-header">Alertas de Pedidos</div>
+    <div class="card-body">
+      <div class="actions">
+        <button class="btn btn-primary" onclick="loadDashboard(true)">
+          Actualizar Dashboard
+        </button>
+        <button class="btn btn-warning" onclick="mostrarAlertasDashboard(true)">
+          Ver Pedidos Pendientes
+        </button>
+      </div>
+      <div id="dashboardMessage"></div>
+      <div id="alertsContainer"></div>
+    </div>
+  </div>
+</div>
