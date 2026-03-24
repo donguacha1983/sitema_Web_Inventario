@@ -3,6 +3,10 @@
 <head>
   <base target="_top">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.min.js"></script>
 </head>
 <body onload="initializeApp()">
   <!-- Contenedor donde se monta el login desde login-view.html -->
@@ -318,6 +322,14 @@
     let pedidoEditandoId = null;
     let custodiasCache = { custodios: [], vehiculos: [], pedidoIds: [] };
     let rutasCache = { pedidoIds: [] };
+    // Instancia Leaflet para la pestaña Rutas
+    let rutaMapInstance = null;
+    let rutaRoutingControl = null;
+    let rutaLayerActiva = null;
+    let rutaOverlayCarreteras = null;
+    let rutaOverlayEtiquetas = null;
+    let rutaMapLayers = {};
+    let rutasCalculadas = [];
     let tabViewsReadyPromise = null;
 
      /*
@@ -538,6 +550,8 @@
         case 'rutas':
           setPedidoIdRutaReadOnly(Boolean(options.bloquearPedidoIdRuta));
           cargarListasRutas();
+          // Leaflet necesita invalidateSize() tras volverse visible para dibujar bien
+          setTimeout(function() { if (rutaMapInstance) rutaMapInstance.invalidateSize(); }, 250);
           break;
         case 'reportes':
           loadClientesReporte();
@@ -1412,12 +1426,354 @@
         clienteInput.value = '';
         lugarInput.value = '';
         destinoInput.value = '';
-        return;
+        return; // Mapa NO se toca; solo se limpian los campos
       }
 
       clienteInput.value = pedido.codigo || '';
       lugarInput.value = pedido.nombre || '';
       destinoInput.value = pedido.unidad || '';
+      // Mapa NO se actualiza aquí; el usuario pulsa "Ver Ruta en Mapa"
+    }
+
+    // -------------------------------------------------------------------
+    // MAPA DE RUTAS – Leaflet.js + OSRM (sin API key)
+    // Restringe origen/destino a Ecuador y muestra alternativas de ruta.
+    // -------------------------------------------------------------------
+
+    // Construye el enlace externo de Google Maps para abrir en nueva pestaña.
+    function construirEnlaceGoogleMaps(origen, destino) {
+      const o = encodeURIComponent(String(origen || '').trim());
+      const d = encodeURIComponent(String(destino || '').trim());
+      return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=driving`;
+    }
+
+    // Geocodifica direccion usando Nominatim restringido a Ecuador.
+    async function geocodificarDireccion(direccion) {
+      try {
+        const t = String(direccion || '').replace(/[|;]+/g, ',').replace(/\s{2,}/g, ' ').trim();
+        if (!t) return null;
+
+        const q = /ecuador/i.test(t) ? t : `${t}, Ecuador`;
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=1&countrycodes=ec`;
+        const resp = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        if (!Array.isArray(data) || data.length === 0) return null;
+
+        const item = data[0];
+        const cc = String(item?.address?.country_code || '').toLowerCase();
+        if (cc !== 'ec') return null;
+
+        return {
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+          display: String(item.display_name || '')
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    // Aplica visualizacion de mapa seleccionada por el usuario.
+    function aplicarVisualizacionMapaRuta() {
+      if (!rutaMapInstance || !rutaMapLayers || Object.keys(rutaMapLayers).length === 0) return;
+      const modo = document.getElementById('mapStyleRuta')?.value || 'google';
+      const siguiente = rutaMapLayers[modo] || rutaMapLayers.google;
+      if (!siguiente) return;
+
+      if (rutaLayerActiva) {
+        rutaMapInstance.removeLayer(rutaLayerActiva);
+      }
+
+      rutaLayerActiva = siguiente;
+      rutaLayerActiva.addTo(rutaMapInstance);
+
+      // Reaplicar overlay de carreteras tras cambiar la vista base.
+      actualizarOverlayCarreterasRuta();
+      actualizarOverlayEtiquetasRuta();
+    }
+
+    // Enciende o apaga la capa extra de carreteras sobre cualquier visualizacion.
+    function actualizarOverlayCarreterasRuta() {
+      if (!rutaMapInstance || !rutaOverlayCarreteras) return;
+      const activar = Boolean(document.getElementById('showRoadsRuta')?.checked);
+      if (activar) {
+        if (!rutaMapInstance.hasLayer(rutaOverlayCarreteras)) {
+          rutaOverlayCarreteras.addTo(rutaMapInstance);
+        }
+      } else if (rutaMapInstance.hasLayer(rutaOverlayCarreteras)) {
+        rutaMapInstance.removeLayer(rutaOverlayCarreteras);
+      }
+    }
+
+    // Muestra etiquetas/ciudades para que satelital sea mas legible.
+    function actualizarOverlayEtiquetasRuta() {
+      if (!rutaMapInstance || !rutaOverlayEtiquetas) return;
+      const modo = document.getElementById('mapStyleRuta')?.value || 'google';
+      const activar = (modo === 'satelite' || modo === 'hibrido');
+      if (activar) {
+        if (!rutaMapInstance.hasLayer(rutaOverlayEtiquetas)) {
+          rutaOverlayEtiquetas.addTo(rutaMapInstance);
+        }
+      } else if (rutaMapInstance.hasLayer(rutaOverlayEtiquetas)) {
+        rutaMapInstance.removeLayer(rutaOverlayEtiquetas);
+      }
+    }
+
+    // Aplica semaforo de trafico al bloque de resumen para lectura rapida.
+    function aplicarEstadoTraficoHint(claseTrafico) {
+      const hint = document.getElementById('rutaMapHint');
+      if (!hint) return;
+      hint.classList.remove('traffic-low', 'traffic-medium', 'traffic-high');
+      if (claseTrafico === 'trafico-bajo') hint.classList.add('traffic-low');
+      if (claseTrafico === 'trafico-medio') hint.classList.add('traffic-medium');
+      if (claseTrafico === 'trafico-alto') hint.classList.add('traffic-high');
+    }
+
+    // Cambia el perfil de transporte (auto / bici / a pie) y recalcula si ya hay ruta activa.
+    function seleccionarPerfilRuta(btn) {
+      // Quitar .active de todos los botones y aplicarlo solo al seleccionado.
+      document.querySelectorAll('.ruta-perfil-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Si ya existe una ruta visible, volver a calcularla con el nuevo perfil.
+      const origen  = document.getElementById('lugarRuta')?.value?.trim()  || '';
+      const destino = document.getElementById('destinoRuta')?.value?.trim() || '';
+      if (origen && destino && rutaRoutingControl) {
+        renderMapaRuta(origen, destino);
+      }
+    }
+
+    // Clasificacion de trafico estimado segun velocidad promedio de la ruta.
+    function obtenerNivelTraficoEstimado(summary) {
+      const distanciaKm = Number(summary?.totalDistance || 0) / 1000;
+      const tiempoHoras = Number(summary?.totalTime || 0) / 3600;
+      if (distanciaKm <= 0 || tiempoHoras <= 0) {
+        return { nivel: 'N/D', clase: 'trafico-nd' };
+      }
+      const vel = distanciaKm / tiempoHoras;
+      if (vel < 35) return { nivel: 'Alto', clase: 'trafico-alto' };
+      if (vel < 55) return { nivel: 'Medio', clase: 'trafico-medio' };
+      return { nivel: 'Bajo', clase: 'trafico-bajo' };
+    }
+
+    // Inicializa el mapa Leaflet la primera vez; después reutiliza la instancia.
+    // Centro por defecto en Ecuador.
+    function initOrGetMapaRuta() {
+      const container = document.getElementById('rutaMapFrame');
+      if (!container) return null;
+
+      if (!rutaMapInstance) {
+        // Zoom 8: Ecuador se ve con suficiente detalle vial desde el inicio.
+        rutaMapInstance = L.map('rutaMapFrame', { zoomControl: true }).setView([-1.5, -78.0], 8);
+
+        // Barra de escala metrica para orientacion visual.
+        L.control.scale({ imperial: false, maxWidth: 150 }).addTo(rutaMapInstance);
+
+        rutaMapLayers = {
+          // Voyager: muestra jerarquia vial completa (autopistas, arterias, calles) con nombres
+          // y colores diferenciados; mucho mas detalle que light_all.
+          google: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
+            maxZoom: 20,
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+          }),
+          satelite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles &copy; Esri'
+          }),
+          // Hibrido: misma base satelital pero con etiquetas/roads mas visibles via overlays.
+          hibrido: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19,
+            attribution: 'Tiles &copy; Esri'
+          }),
+          oscuro: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
+            maxZoom: 20,
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+          })
+        };
+
+        rutaOverlayCarreteras = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          opacity: 0.9,
+          attribution: 'Roads &copy; Esri'
+        });
+
+        rutaOverlayEtiquetas = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          opacity: 0.95,
+          attribution: 'Labels &copy; Esri'
+        });
+
+        aplicarVisualizacionMapaRuta();
+      }
+
+      return rutaMapInstance;
+    }
+    // Geocodifica origen y destino, luego traza la mejor ruta con OSRM.
+    async function renderMapaRuta(origen, destino) {
+      const hint     = document.getElementById('rutaMapHint');
+      const openLink = document.getElementById('abrirMapsRuta');
+      const origenTxt  = String(origen  || '').trim();
+      const destinoTxt = String(destino || '').trim();
+
+      // Actualizar enlace "Abrir en Google Maps"
+      if (openLink) {
+        openLink.href = (origenTxt && destinoTxt)
+          ? construirEnlaceGoogleMaps(origenTxt, destinoTxt)
+          : '#';
+      }
+
+      if (!origenTxt || !destinoTxt) {
+        if (hint) hint.textContent = 'Seleccione un ID Pedido con Lugar y Destino de Ecuador para trazar la ruta.';
+        return;
+      }
+
+      if (hint) hint.textContent = '⏳ Calculando mejor ruta...';
+
+      try {
+        const mapa = initOrGetMapaRuta();
+        if (!mapa) return;
+
+        mapa.invalidateSize();
+        actualizarOverlayCarreterasRuta();
+
+        if (rutaRoutingControl) {
+          mapa.removeControl(rutaRoutingControl);
+          rutaRoutingControl = null;
+        }
+
+        const [oCoords, dCoords] = await Promise.all([
+          geocodificarDireccion(origenTxt),
+          geocodificarDireccion(destinoTxt)
+        ]);
+
+        if (!oCoords) {
+          if (hint) hint.textContent = `⚠️ Lugar no encontrado en Ecuador: "${origenTxt}".`;
+          return;
+        }
+        if (!dCoords) {
+          if (hint) hint.textContent = `⚠️ Destino no encontrado en Ecuador: "${destinoTxt}".`;
+          return;
+        }
+
+        // Leer perfil de transporte activo: driving / cycling / walking.
+        const perfilActivo = document.querySelector('.ruta-perfil-btn.active')?.dataset?.perfil || 'driving';
+
+        rutaRoutingControl = L.Routing.control({
+          waypoints: [
+            L.latLng(oCoords.lat, oCoords.lng),
+            L.latLng(dCoords.lat, dCoords.lng)
+          ],
+          router: L.Routing.osrmv1({
+            serviceUrl: 'https://router.project-osrm.org/route/v1',
+            profile: perfilActivo,
+            language: 'es',
+            // Solicitar hasta 3 rutas alternativas al servidor OSRM.
+            routingOptions: { alternatives: 3 }
+          }),
+          // Marcadores personalizados tipo pin: A (verde) = origen, B (rojo) = destino.
+          createMarker: function(i, waypoint) {
+            const isOrigen = i === 0;
+            const color    = isOrigen ? '#34a853' : '#ea4335';
+            const label    = isOrigen ? 'A' : 'B';
+            const icon = L.divIcon({
+              className: 'ruta-custom-marker',
+              html: `<div style="background:${color};width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);color:white;font-weight:800;font-size:13px;line-height:1;">${label}</span></div>`,
+              iconSize: [30, 38],
+              iconAnchor: [15, 36]
+            });
+            return L.marker(waypoint.latLng, { icon, draggable: false });
+          },
+          show: true,
+          collapsible: true,
+          addWaypoints: false,
+          routeWhileDragging: false,
+          draggableWaypoints: false,
+          fitSelectedRoutes: true,
+          showAlternatives: true,
+          lineOptions: {
+            // Ruta principal: borde blanco ancho + linea azul intensa encima.
+            styles: [
+              { color: '#ffffff', weight: 12, opacity: 1.0 },
+              { color: '#1a73e8', weight: 7,  opacity: 1.0 }
+            ],
+            missingRouteStyles: [{ color: '#aaa', weight: 4, opacity: 0.5 }]
+          },
+          altLineOptions: {
+            // Alternativas: borde blanco + naranja ambar punteado; visualmente distinto del azul.
+            styles: [
+              { color: '#ffffff', weight: 9, opacity: 0.85 },
+              { color: '#e6941a', weight: 5, opacity: 0.85, dashArray: '1,10' }
+            ]
+          }
+        }).addTo(mapa);
+
+        rutaRoutingControl.on('routesfound', function(e) {
+          rutasCalculadas = Array.isArray(e.routes) ? e.routes : [];
+          const ruta = e.routes[0];
+          const km   = (ruta.summary.totalDistance / 1000).toFixed(1);
+          const mins = Math.round(ruta.summary.totalTime / 60);
+          const hrs  = Math.floor(mins / 60);
+          const rem  = mins % 60;
+          const tiempo = hrs > 0 ? `${hrs}h ${rem}min` : `${mins} min`;
+          const traficoBase = obtenerNivelTraficoEstimado(ruta.summary);
+          aplicarEstadoTraficoHint(traficoBase.clase);
+
+          const alternativasHtml = rutasCalculadas.slice(0, 3).map((r, idx) => {
+            const altKm = (r.summary.totalDistance / 1000).toFixed(1);
+            const altMin = Math.round(r.summary.totalTime / 60);
+            const altHrs = Math.floor(altMin / 60);
+            const altRem = altMin % 60;
+            const altTiempo = altHrs > 0 ? `${altHrs}h ${altRem}min` : `${altMin} min`;
+            const badge = idx === 0 ? 'Mas rapida' : `Alternativa ${idx}`;
+            const traf = obtenerNivelTraficoEstimado(r.summary);
+            return `<span class="ruta-chip ${idx === 0 ? 'best' : ''}">${badge}: ${altKm} km · ${altTiempo}</span>` +
+              ` <span class="ruta-chip ${traf.clase}">Trafico ${traf.nivel}</span>`;
+          }).join(' ');
+
+          if (hint) hint.innerHTML =
+            `✅ <strong>${e.routes.length}</strong> ruta(s) disponible(s). Seleccionada: ` +
+            `<strong>${origenTxt}</strong> → <strong>${destinoTxt}</strong>` +
+            ` &nbsp;|&nbsp; <strong>${km} km</strong> &nbsp;|&nbsp; <strong>${tiempo}</strong>` +
+            ` &nbsp;|&nbsp; Trafico estimado: <span class="ruta-chip ${traficoBase.clase}">${traficoBase.nivel}</span>` +
+            ` <br>${alternativasHtml}` +
+            ` <br><small>Haz clic en otra ruta del mapa o del panel para marcar la que prefieras.</small>`;
+        });
+
+        rutaRoutingControl.on('routeselected', function(e) {
+          const ruta = e.route;
+          const km   = (ruta.summary.totalDistance / 1000).toFixed(1);
+          const mins = Math.round(ruta.summary.totalTime / 60);
+          const hrs  = Math.floor(mins / 60);
+          const rem  = mins % 60;
+          const tiempo = hrs > 0 ? `${hrs}h ${rem}min` : `${mins} min`;
+          const traf = obtenerNivelTraficoEstimado(ruta.summary);
+          aplicarEstadoTraficoHint(traf.clase);
+          if (hint) hint.innerHTML =
+            `✅ Ruta seleccionada: <strong>${origenTxt}</strong> → <strong>${destinoTxt}</strong>` +
+            ` &nbsp;|&nbsp; <strong>${km} km</strong> &nbsp;|&nbsp; <strong>${tiempo}</strong>` +
+            ` &nbsp;|&nbsp; Trafico estimado: <span class="ruta-chip ${traf.clase}">${traf.nivel}</span>`;
+        });
+
+        rutaRoutingControl.on('routingerror', function() {
+          if (hint) hint.textContent =
+            '⚠️ No se pudo calcular la ruta dentro de Ecuador. Use direcciones más específicas (ciudad, provincia).';
+        });
+      } catch (err) {
+        if (hint) hint.textContent = '⚠️ Error al cargar el mapa. Verifique la conexión a internet.';
+      }
+    }
+
+    // Botón "Ver Ruta en Mapa": lanza renderMapaRuta con los valores actuales del form.
+    function mostrarRutaEnMapa() {
+      const origen  = document.getElementById('lugarRuta')?.value?.trim()  || '';
+      const destino = document.getElementById('destinoRuta')?.value?.trim() || '';
+      if (!origen || !destino) {
+        showMessage('msgRuta', 'Seleccione un ID Pedido válido para obtener origen y destino.', 'warning');
+        return;
+      }
+      renderMapaRuta(origen, destino);
     }
 
     function abrirRutasConPedidoId(pedidoId) {
@@ -2289,6 +2645,13 @@
       document.getElementById('formRuta').reset();
       document.getElementById('msgRuta').innerHTML = '';
       actualizarResumenRutaPorPedido();
+      const hint = document.getElementById('rutaMapHint');
+      if (hint) hint.textContent = 'Seleccione un ID Pedido para cargar origen (Lugar) y destino en el mapa.';
+      rutasCalculadas = [];
+      if (rutaRoutingControl && rutaMapInstance) {
+        rutaMapInstance.removeControl(rutaRoutingControl);
+        rutaRoutingControl = null;
+      }
     }
 
     // Limpia campo y resultados de búsqueda de pedidos.
