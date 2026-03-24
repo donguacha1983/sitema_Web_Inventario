@@ -2,7 +2,7 @@ const { getWorkbook, saveWorkbook } = require('./excel');
 
 const HOJA_PEDIDOS = 'Pedidos';
 const HOJA_PEDIDOS_LEGACY = 'Productos';
-const HOJA_CUSTODIAS = 'Movimientos';
+
 
 // La hoja historica era "Productos". Se migra automaticamente a "Pedidos".
 
