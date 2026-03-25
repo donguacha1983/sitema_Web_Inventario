@@ -23,17 +23,35 @@
           </div>
           <div class="form-group">
             <label for="lugarRuta">Lugar</label>
-            <input id="lugarRuta" type="text" readonly>
+            <input
+              id="lugarRuta"
+              type="text"
+              list="listaSugerenciasLugarRuta"
+              placeholder="Escribe una direccion o referencia"
+              oninput="programarSugerenciasRuta('lugarRuta', 'listaSugerenciasLugarRuta')"
+              onchange="programarSugerenciasRuta('lugarRuta', 'listaSugerenciasLugarRuta')"
+            >
+            <datalist id="listaSugerenciasLugarRuta"></datalist>
           </div>
           <div class="form-group">
             <label for="destinoRuta">Destino</label>
-            <input id="destinoRuta" type="text" readonly>
+            <input
+              id="destinoRuta"
+              type="text"
+              list="listaSugerenciasDestinoRuta"
+              placeholder="Escribe una direccion o referencia"
+              oninput="programarSugerenciasRuta('destinoRuta', 'listaSugerenciasDestinoRuta')"
+              onchange="programarSugerenciasRuta('destinoRuta', 'listaSugerenciasDestinoRuta')"
+            >
+            <datalist id="listaSugerenciasDestinoRuta"></datalist>
           </div>
         </div>
         <div class="actions">
           <button type="submit" class="btn btn-success">Guardar Ruta</button>
           <button type="button" class="btn btn-secondary" onclick="limpiarFormRuta()">Limpiar</button>
           <button type="button" class="btn btn-primary" onclick="mostrarRutaEnMapa()">Ver Ruta en Mapa</button>
+          <button type="button" class="btn btn-secondary" id="btnModoPuntosRuta" onclick="toggleModoPuntosRuta()">Modo puntos A/B</button>
+          <button type="button" class="btn btn-secondary" onclick="limpiarPuntosManualRuta()">Limpiar puntos</button>
           <a id="abrirMapsRuta" class="btn btn-secondary" href="#" target="_blank" rel="noopener noreferrer">Abrir en Google Maps</a>
         </div>
       </form>
@@ -61,15 +79,10 @@
           <input id="showRoadsRuta" type="checkbox" checked onchange="actualizarOverlayCarreterasRuta()">
           Carreteras
         </label>
-        <!-- Selector de perfil de transporte: cada modo usa una red de rutas diferente en OSRM -->
-        <div class="ruta-perfil-selector">
-          <button type="button" class="ruta-perfil-btn active" data-perfil="driving"  onclick="seleccionarPerfilRuta(this)" title="Rutas en auto">🚗 Auto</button>
-          <button type="button" class="ruta-perfil-btn"        data-perfil="cycling"  onclick="seleccionarPerfilRuta(this)" title="Rutas en bicicleta">🚴 Bici</button>
-          <button type="button" class="ruta-perfil-btn"        data-perfil="walking"  onclick="seleccionarPerfilRuta(this)" title="Rutas a pie">🚶 A pie</button>
-        </div>
-        <span class="ruta-chip trafico-bajo">Trafico bajo</span>
-        <span class="ruta-chip trafico-medio">Trafico medio</span>
-        <span class="ruta-chip trafico-alto">Trafico alto</span>
+        <label class="ruta-roads-toggle" for="showPlacesRuta">
+          <input id="showPlacesRuta" type="checkbox" checked onchange="actualizarOverlayLugaresRuta()">
+          Lugares
+        </label>
       </div>
       <div class="rutas-map-wrapper">
         <!-- div controlado por Leaflet.js; NO usar iframe -->
