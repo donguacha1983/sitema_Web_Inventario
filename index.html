@@ -330,6 +330,13 @@
     let rutaOverlayEtiquetas = null;
     let rutaMapLayers = {};
     let rutasCalculadas = [];
+    let rutaModoPuntosManual = false;
+    let rutaPuntoA = null;
+    let rutaPuntoB = null;
+    let rutaMarkerA = null;
+    let rutaMarkerB = null;
+    let rutaAutocompleteTimers = {};
+    let rutaAutocompleteControllers = {};
     let tabViewsReadyPromise = null;
 
      /*
@@ -1435,6 +1442,288 @@
       // Mapa NO se actualiza aquí; el usuario pulsa "Ver Ruta en Mapa"
     }
 
+    // Normaliza texto para comparaciones flexibles (sin tildes, minúsculas y espacios limpios).
+    function normalizarTextoRuta(txt) {
+      return String(txt || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    // Busca posibles direcciones desde datos locales (pedidos) para casos de alias comerciales.
+    // Ejemplo: si el usuario escribe "Portrans", se priorizan campos nombre/unidad relacionados.
+    function obtenerSugerenciasLocalesDireccion(termino, max = 6) {
+      const q = normalizarTextoRuta(termino);
+      if (!q || q.length < 2 || !Array.isArray(pedidosCache) || pedidosCache.length === 0) {
+        return [];
+      }
+
+      const candidatos = [];
+
+      for (const pedido of pedidosCache) {
+        const codigo = String(pedido?.codigo || '').trim();
+        const nombre = String(pedido?.nombre || '').trim();
+        const unidad = String(pedido?.unidad || '').trim();
+
+        if (!codigo && !nombre && !unidad) continue;
+
+        const codigoN = normalizarTextoRuta(codigo);
+        const nombreN = normalizarTextoRuta(nombre);
+        const unidadN = normalizarTextoRuta(unidad);
+        const hayMatch = [codigoN, nombreN, unidadN].some((v) => v && v.includes(q));
+        if (!hayMatch) continue;
+
+        // Prioriza los campos de direccion reales (nombre/unidad) sobre el alias comercial (codigo).
+        if (nombre) {
+          let score = 20;
+          if (nombreN.startsWith(q)) score += 10;
+          if (nombreN.includes(q)) score += 4;
+          if (/\d/.test(nombre)) score += 3; // Numero suele indicar direccion más precisa.
+          candidatos.push({ value: nombre, score });
+        }
+
+        if (unidad) {
+          let score = 18;
+          if (unidadN.startsWith(q)) score += 10;
+          if (unidadN.includes(q)) score += 4;
+          if (/\d/.test(unidad)) score += 3;
+          candidatos.push({ value: unidad, score });
+        }
+
+        if (!nombre && !unidad && codigo) {
+          let score = 8;
+          if (codigoN.startsWith(q)) score += 6;
+          candidatos.push({ value: codigo, score });
+        }
+      }
+
+      // Dedupe por texto normalizado y conserva el mejor score por valor.
+      const mejores = new Map();
+      for (const c of candidatos) {
+        const key = normalizarTextoRuta(c.value);
+        if (!key) continue;
+        const prev = mejores.get(key);
+        if (!prev || c.score > prev.score) mejores.set(key, c);
+      }
+
+      return Array.from(mejores.values())
+        .sort((a, b) => b.score - a.score)
+        .slice(0, max)
+        .map((x) => x.value);
+    }
+
+    // Limpia todas las opciones de un datalist.
+    function limpiarDatalist(datalistId) {
+      const list = document.getElementById(datalistId);
+      if (!list) return;
+      list.innerHTML = '';
+    }
+
+    // Ciudades y palabras clave para priorizar sugerencias tipo "Maps".
+    const CIUDADES_PRIORITARIAS_RUTA = [
+      'Quito', 'Guayaquil', 'Cuenca', 'Ambato', 'Manta',
+      'Santo Domingo', 'Machala', 'Loja', 'Riobamba'
+    ];
+    const PALABRAS_LUGARES_CONCURRIDOS = [
+      'centro', 'terminal', 'mercado', 'mall', 'aeropuerto',
+      'puerto', 'parque industrial', 'zona industrial', 'estacion'
+    ];
+    const PALABRAS_TRANSPORTE = [
+      'trans', 'transporte', 'cooperativa', 'logistica', 'carga',
+      'encomienda', 'flota', 'terminal'
+    ];
+
+    // Construye variantes de consulta para mejorar hallazgo de ciudades y empresas de transporte.
+    function construirConsultasSugerenciaRuta(texto) {
+      const limpio = String(texto || '').trim();
+      const limpioN = normalizarTextoRuta(limpio);
+      if (!limpio) return [];
+
+      const queries = [];
+      queries.push(/ecuador/i.test(limpio) ? limpio : `${limpio}, Ecuador`);
+      queries.push(limpio);
+
+      const esTextoCorto = limpio.split(/\s+/).length <= 3;
+      if (esTextoCorto) {
+        for (const c of CIUDADES_PRIORITARIAS_RUTA.slice(0, 5)) {
+          queries.push(`${limpio}, ${c}, Ecuador`);
+        }
+      }
+
+      const pareceTransporte = PALABRAS_TRANSPORTE.some((k) => limpioN.includes(k));
+      if (pareceTransporte) {
+        queries.push(`${limpio}, terminal terrestre, Ecuador`);
+        queries.push(`${limpio}, cooperativa transporte, Ecuador`);
+      }
+
+      const pareceConcurrido = PALABRAS_LUGARES_CONCURRIDOS.some((k) => limpioN.includes(k));
+      if (pareceConcurrido) {
+        queries.push(`${limpio}, centro, Ecuador`);
+      }
+
+      // Dedupe manteniendo orden original.
+      const unicas = [];
+      const seen = new Set();
+      for (const q of queries) {
+        const key = normalizarTextoRuta(q);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        unicas.push(q);
+      }
+      return unicas.slice(0, 7);
+    }
+
+    // Consulta Nominatim para un texto y devuelve posibles direcciones dentro de Ecuador.
+    async function consultarNominatimSugerencias(query, signal) {
+      const viewboxEc = '-81.3,-5.2,-75.1,1.6';
+      const url = `https://nominatim.openstreetmap.org/search?${new URLSearchParams({
+        q: query,
+        format: 'json',
+        limit: '6',
+        addressdetails: '1',
+        countrycodes: 'ec',
+        dedupe: '1',
+        bounded: '1',
+        viewbox: viewboxEc
+      }).toString()}`;
+
+      const resp = await fetch(url, {
+        signal,
+        headers: {
+          'Accept-Language': 'es',
+          'User-Agent': 'sistema-web-inventario/1.0'
+        }
+      });
+      if (!resp.ok) return [];
+
+      const data = await resp.json();
+      if (!Array.isArray(data)) return [];
+
+      return data
+        .filter((item) => String(item?.address?.country_code || '').toLowerCase() === 'ec')
+        .map((item) => String(item.display_name || '').trim())
+        .filter(Boolean);
+    }
+
+    // Pondera sugerencias para priorizar ciudades grandes, lugares concurridos y transporte.
+    function puntuarSugerenciaRuta(valor, termino) {
+      const v = normalizarTextoRuta(valor);
+      const q = normalizarTextoRuta(termino);
+      let score = 0;
+
+      if (v.includes(q)) score += 30;
+      if (v.startsWith(q)) score += 12;
+
+      if (CIUDADES_PRIORITARIAS_RUTA.some((c) => v.includes(normalizarTextoRuta(c)))) score += 6;
+      if (PALABRAS_LUGARES_CONCURRIDOS.some((k) => v.includes(k))) score += 8;
+      if (PALABRAS_TRANSPORTE.some((k) => v.includes(k))) score += 10;
+
+      return score;
+    }
+
+    // Obtiene sugerencias de direcciones en Ecuador para autocompletado en vivo.
+    async function buscarSugerenciasDireccion(termino, signal) {
+      const texto = String(termino || '').trim();
+      if (texto.length < 3) return [];
+
+      // 1) Sugerencias locales desde el historial de pedidos/clientes.
+      const locales = obtenerSugerenciasLocalesDireccion(texto, 6);
+
+      // 2) Sugerencias remotas: múltiples consultas para capturar ciudades y puntos concurridos.
+      const consultas = construirConsultasSugerenciaRuta(texto);
+      const remotasAcumuladas = [];
+      for (const q of consultas) {
+        const chunk = await consultarNominatimSugerencias(q, signal);
+        if (chunk.length > 0) remotasAcumuladas.push(...chunk);
+      }
+
+      // 3) Mezcla local + remota sin duplicar y con score de prioridad.
+      const unicas = [];
+      const seen = new Set();
+      for (const v of [...locales, ...remotasAcumuladas]) {
+        const key = normalizarTextoRuta(v);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        unicas.push(v);
+      }
+
+      return unicas
+        .map((valor) => ({ valor, score: puntuarSugerenciaRuta(valor, texto) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 6)
+        .map((x) => x.valor);
+    }
+
+    // Ejecuta la búsqueda y llena el datalist asociado al input.
+    async function actualizarSugerenciasRuta(inputId, datalistId) {
+      const input = document.getElementById(inputId);
+      const list = document.getElementById(datalistId);
+      if (!input || !list) return;
+
+      const termino = String(input.value || '').trim();
+      if (termino.length < 3) {
+        limpiarDatalist(datalistId);
+        return;
+      }
+
+      // Cancela la consulta anterior de este campo para evitar resultados viejos.
+      if (rutaAutocompleteControllers[inputId]) {
+        rutaAutocompleteControllers[inputId].abort();
+      }
+
+      const controller = new AbortController();
+      rutaAutocompleteControllers[inputId] = controller;
+
+      try {
+        const sugerencias = await buscarSugerenciasDireccion(termino, controller.signal);
+        // Si el valor cambió mientras cargaba, no sobrescribimos con resultados obsoletos.
+        if (String(input.value || '').trim() !== termino) return;
+
+        list.innerHTML = sugerencias
+          .map((s) => `<option value="${escapeHtml(s)}"></option>`)
+          .join('');
+      } catch (err) {
+        // AbortError es esperado al escribir rápido; otros errores se ignoran para no romper UI.
+        if (err?.name !== 'AbortError') {
+          limpiarDatalist(datalistId);
+        }
+      }
+    }
+
+    // Debounce por campo para evitar demasiadas llamadas mientras el usuario escribe.
+    function programarSugerenciasRuta(inputId, datalistId) {
+      if (rutaAutocompleteTimers[inputId]) {
+        clearTimeout(rutaAutocompleteTimers[inputId]);
+      }
+
+      rutaAutocompleteTimers[inputId] = setTimeout(() => {
+        actualizarSugerenciasRuta(inputId, datalistId);
+      }, 300);
+    }
+
+    // Vincula eventos una sola vez para que el autocompletado quede activo en la pestaña Rutas.
+    function inicializarAutocompleteRutas() {
+      const lugarInput = document.getElementById('lugarRuta');
+      const destinoInput = document.getElementById('destinoRuta');
+      if (!lugarInput || !destinoInput) return;
+
+      if (!lugarInput.dataset.autocompleteReady) {
+        lugarInput.dataset.autocompleteReady = '1';
+        lugarInput.addEventListener('focus', () => {
+          programarSugerenciasRuta('lugarRuta', 'listaSugerenciasLugarRuta');
+        });
+      }
+
+      if (!destinoInput.dataset.autocompleteReady) {
+        destinoInput.dataset.autocompleteReady = '1';
+        destinoInput.addEventListener('focus', () => {
+          programarSugerenciasRuta('destinoRuta', 'listaSugerenciasDestinoRuta');
+        });
+      }
+    }
+
     // -------------------------------------------------------------------
     // MAPA DE RUTAS – Leaflet.js + OSRM (sin API key)
     // Restringe origen/destino a Ecuador y muestra alternativas de ruta.
@@ -1447,27 +1736,185 @@
       return `https://www.google.com/maps/dir/?api=1&origin=${o}&destination=${d}&travelmode=driving`;
     }
 
-    // Geocodifica direccion usando Nominatim restringido a Ecuador.
+    // Geocodifica direccion con estrategia "tipo Maps":
+    // 1) Limpieza y normalizacion del texto.
+    // 2) Varias consultas (texto libre + estructurada por ciudad) en Ecuador.
+    // 3) Ranking de candidatos para elegir el resultado mas coherente.
     async function geocodificarDireccion(direccion) {
-      try {
-        const t = String(direccion || '').replace(/[|;]+/g, ',').replace(/\s{2,}/g, ' ').trim();
-        if (!t) return null;
+      // Limpia separadores raros y espacios duplicados.
+      const normalizar = (txt) => String(txt || '')
+        .replace(/[|;]+/g, ',')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/^,|,$/g, '')
+        .trim();
 
-        const q = /ecuador/i.test(t) ? t : `${t}, Ecuador`;
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&addressdetails=1&countrycodes=ec`;
-        const resp = await fetch(url, { headers: { 'Accept-Language': 'es' } });
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        if (!Array.isArray(data) || data.length === 0) return null;
+      // Quita tildes para comparar tokens de forma estable.
+      const sinTildes = (txt) => String(txt || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
 
-        const item = data[0];
+      // Descompone en tokens utiles y elimina palabras vacias comunes.
+      const tokenizar = (txt) => {
+        const stop = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'en', 'ecuador']);
+        return sinTildes(txt)
+          .split(/[^a-z0-9]+/)
+          .filter((x) => x.length >= 2 && !stop.has(x));
+      };
+
+      // Intenta extraer un posible componente de ciudad/provincia al final.
+      const extraerCiudad = (txt) => {
+        const parts = String(txt || '').split(',').map((p) => p.trim()).filter(Boolean);
+        if (parts.length < 2) return '';
+        const ultima = parts[parts.length - 1];
+        if (/^ecuador$/i.test(ultima) && parts.length >= 2) {
+          return parts[parts.length - 2] || '';
+        }
+        return ultima;
+      };
+
+      // Evalua la calidad de cada candidato devuelto por Nominatim.
+      const puntuarCandidato = (item, queryTokens) => {
         const cc = String(item?.address?.country_code || '').toLowerCase();
-        if (cc !== 'ec') return null;
+        if (cc !== 'ec') return -9999;
+
+        const display = String(item?.display_name || '');
+        const displayTokens = new Set(tokenizar(display));
+        let score = 0;
+
+        // Coincidencia de tokens de la consulta.
+        for (const tk of queryTokens) {
+          if (displayTokens.has(tk)) score += 8;
+        }
+
+        // Prioriza tipos de via/lugar mas utiles para rutas.
+        const tipo = String(item?.type || '').toLowerCase();
+        const clase = String(item?.class || '').toLowerCase();
+        if (['residential', 'road', 'trunk', 'primary', 'secondary', 'tertiary', 'motorway'].includes(tipo)) score += 12;
+        if (['highway', 'place', 'building'].includes(clase)) score += 6;
+
+        // Importancia y confianza del geocoder.
+        const importance = Number(item?.importance || 0);
+        score += Math.round(importance * 10);
+
+        // Bonus leve si inicia parecido al texto buscado.
+        const q0 = queryTokens[0];
+        if (q0 && sinTildes(display).startsWith(q0)) score += 5;
+
+        return score;
+      };
+
+      // Ejecuta una consulta y retorna candidatos crudos.
+      const consultar = async (params) => {
+        const base = 'https://nominatim.openstreetmap.org/search';
+        const url = `${base}?${new URLSearchParams(params).toString()}`;
+        const resp = await fetch(url, {
+          headers: {
+            'Accept-Language': 'es',
+            'User-Agent': 'sistema-web-inventario/1.0'
+          }
+        });
+        if (!resp.ok) return [];
+        const data = await resp.json();
+        return Array.isArray(data) ? data : [];
+      };
+
+      try {
+        const texto = normalizar(direccion);
+        if (!texto) return null;
+
+        // Si la entrada parece alias comercial (ej: Portrans), intenta expandir con direcciones
+        // locales conocidas en pedidos para aumentar probabilidad de match real.
+        const aliasLocales = obtenerSugerenciasLocalesDireccion(texto, 3);
+        const semillas = [texto, ...aliasLocales].filter(Boolean);
+
+        const textoConPais = /ecuador/i.test(semillas[0]) ? semillas[0] : `${semillas[0]}, Ecuador`;
+        const ciudad = extraerCiudad(semillas[0]);
+        const queryTokens = tokenizar(textoConPais);
+
+        // Caja aproximada de Ecuador (west,south,east,north).
+        // Se usa primero en modo bounded para acercar resultados locales.
+        const viewboxEc = '-81.3,-5.2,-75.1,1.6';
+
+        const estrategias = [];
+
+        // Genera consultas por cada semilla (texto original + aliases locales) para no depender
+        // de una única forma de escribir el lugar.
+        for (const semilla of semillas) {
+          const semillaConPais = /ecuador/i.test(semilla) ? semilla : `${semilla}, Ecuador`;
+          estrategias.push({
+            q: semillaConPais,
+            format: 'json',
+            limit: '8',
+            addressdetails: '1',
+            countrycodes: 'ec',
+            dedupe: '1',
+            bounded: '1',
+            viewbox: viewboxEc
+          });
+          estrategias.push({
+            q: semillaConPais,
+            format: 'json',
+            limit: '8',
+            addressdetails: '1',
+            countrycodes: 'ec',
+            dedupe: '1'
+          });
+        }
+
+        // Si viene "direccion, ciudad", intenta modo estructurado con la semilla principal.
+        if (ciudad) {
+          estrategias.push({
+            street: semillas[0].split(',')[0],
+            city: ciudad,
+            country: 'Ecuador',
+            format: 'json',
+            limit: '8',
+            addressdetails: '1',
+            countrycodes: 'ec',
+            dedupe: '1'
+          });
+        }
+
+        // Fallback final con texto tal cual para capturar nombres cortos.
+        estrategias.push({
+          q: texto,
+          format: 'json',
+          limit: '8',
+          addressdetails: '1',
+          countrycodes: 'ec',
+          dedupe: '1'
+        });
+
+        let candidatos = [];
+        for (const params of estrategias) {
+          // Acumula resultados de cada estrategia para luego rankearlos en conjunto.
+          const chunk = await consultar(params);
+          if (chunk.length > 0) candidatos = candidatos.concat(chunk);
+        }
+
+        if (candidatos.length === 0) return null;
+
+        // Elimina duplicados por lat/lon para evitar repetir candidatos iguales.
+        const unicosMap = new Map();
+        for (const item of candidatos) {
+          const key = `${item.lat}|${item.lon}`;
+          if (!unicosMap.has(key)) unicosMap.set(key, item);
+        }
+        const unicos = Array.from(unicosMap.values());
+
+        unicos.sort((a, b) => puntuarCandidato(b, queryTokens) - puntuarCandidato(a, queryTokens));
+        const mejor = unicos[0];
+        if (!mejor) return null;
+
+        const lat = Number(mejor.lat);
+        const lng = Number(mejor.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
 
         return {
-          lat: parseFloat(item.lat),
-          lng: parseFloat(item.lon),
-          display: String(item.display_name || '')
+          lat,
+          lng,
+          display: String(mejor.display_name || '')
         };
       } catch {
         return null;
@@ -1490,7 +1937,7 @@
 
       // Reaplicar overlay de carreteras tras cambiar la vista base.
       actualizarOverlayCarreterasRuta();
-      actualizarOverlayEtiquetasRuta();
+      actualizarOverlayLugaresRuta();
     }
 
     // Enciende o apaga la capa extra de carreteras sobre cualquier visualizacion.
@@ -1506,11 +1953,107 @@
       }
     }
 
-    // Muestra etiquetas/ciudades para que satelital sea mas legible.
-    function actualizarOverlayEtiquetasRuta() {
+    // Sincroniza estado visual del boton "Modo puntos A/B".
+    function actualizarBotonModoPuntosRuta() {
+      const btn = document.getElementById('btnModoPuntosRuta');
+      if (!btn) return;
+      btn.classList.toggle('btn-active', rutaModoPuntosManual);
+      btn.textContent = rutaModoPuntosManual ? 'Modo puntos A/B (activo)' : 'Modo puntos A/B';
+    }
+
+    // Crea marcador visual A/B reutilizable.
+    function crearMarkerPuntoRuta(latlng, esA) {
+      const color = esA ? '#34a853' : '#ea4335';
+      const label = esA ? 'A' : 'B';
+      const icon = L.divIcon({
+        className: 'ruta-custom-marker',
+        html: `<div style="background:${color};width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(45deg);color:white;font-weight:800;font-size:13px;line-height:1;">${label}</span></div>`,
+        iconSize: [30, 38],
+        iconAnchor: [15, 36]
+      });
+      return L.marker(latlng, { icon, draggable: false });
+    }
+
+    // Limpia puntos y marcadores manuales del mapa.
+    function limpiarPuntosManualRuta() {
+      rutaPuntoA = null;
+      rutaPuntoB = null;
+
+      if (rutaMapInstance && rutaMarkerA) {
+        rutaMapInstance.removeLayer(rutaMarkerA);
+      }
+      if (rutaMapInstance && rutaMarkerB) {
+        rutaMapInstance.removeLayer(rutaMarkerB);
+      }
+
+      rutaMarkerA = null;
+      rutaMarkerB = null;
+
+      const hint = document.getElementById('rutaMapHint');
+      if (hint && rutaModoPuntosManual) {
+        hint.textContent = 'Modo puntos activo: haz clic para marcar Punto A y luego Punto B.';
+      }
+    }
+
+    // Activa/desactiva modo de selección manual por clic en el mapa.
+    function toggleModoPuntosRuta() {
+      const mapa = initOrGetMapaRuta();
+      if (!mapa) return;
+
+      rutaModoPuntosManual = !rutaModoPuntosManual;
+      actualizarBotonModoPuntosRuta();
+
+      if (rutaModoPuntosManual) {
+        limpiarPuntosManualRuta();
+        const hint = document.getElementById('rutaMapHint');
+        if (hint) hint.textContent = 'Modo puntos activo: haz clic para marcar Punto A y luego Punto B.';
+      }
+    }
+
+    // Maneja clics sobre el mapa para capturar A/B y lanzar cálculo de ruta.
+    function manejarClickMapaRuta(e) {
+      if (!rutaModoPuntosManual || !rutaMapInstance) return;
+
+      const lat = Number(e?.latlng?.lat);
+      const lng = Number(e?.latlng?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+      const ll = L.latLng(lat, lng);
+
+      if (!rutaPuntoA || (rutaPuntoA && rutaPuntoB)) {
+        // Primer clic o reinicio: define A y limpia B.
+        rutaPuntoA = ll;
+        rutaPuntoB = null;
+
+        if (rutaMarkerA) rutaMapInstance.removeLayer(rutaMarkerA);
+        if (rutaMarkerB) rutaMapInstance.removeLayer(rutaMarkerB);
+
+        rutaMarkerA = crearMarkerPuntoRuta(ll, true).addTo(rutaMapInstance);
+        rutaMarkerB = null;
+
+        const lugarInput = document.getElementById('lugarRuta');
+        if (lugarInput) lugarInput.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+        const hint = document.getElementById('rutaMapHint');
+        if (hint) hint.textContent = 'Punto A marcado. Ahora haz clic para marcar el Punto B.';
+        return;
+      }
+
+      // Segundo clic: define B y calcula.
+      rutaPuntoB = ll;
+      if (rutaMarkerB) rutaMapInstance.removeLayer(rutaMarkerB);
+      rutaMarkerB = crearMarkerPuntoRuta(ll, false).addTo(rutaMapInstance);
+
+      const destinoInput = document.getElementById('destinoRuta');
+      if (destinoInput) destinoInput.value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+      renderMapaRutaDesdeCoordenadas(rutaPuntoA, rutaPuntoB, 'Punto A', 'Punto B');
+    }
+
+    // Enciende o apaga la capa de lugares/etiquetas (ciudades, zonas, referencias).
+    function actualizarOverlayLugaresRuta() {
       if (!rutaMapInstance || !rutaOverlayEtiquetas) return;
-      const modo = document.getElementById('mapStyleRuta')?.value || 'google';
-      const activar = (modo === 'satelite' || modo === 'hibrido');
+      const activar = Boolean(document.getElementById('showPlacesRuta')?.checked);
       if (activar) {
         if (!rutaMapInstance.hasLayer(rutaOverlayEtiquetas)) {
           rutaOverlayEtiquetas.addTo(rutaMapInstance);
@@ -1528,19 +2071,6 @@
       if (claseTrafico === 'trafico-bajo') hint.classList.add('traffic-low');
       if (claseTrafico === 'trafico-medio') hint.classList.add('traffic-medium');
       if (claseTrafico === 'trafico-alto') hint.classList.add('traffic-high');
-    }
-
-    // Cambia el perfil de transporte (auto / bici / a pie) y recalcula si ya hay ruta activa.
-    function seleccionarPerfilRuta(btn) {
-      // Quitar .active de todos los botones y aplicarlo solo al seleccionado.
-      document.querySelectorAll('.ruta-perfil-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      // Si ya existe una ruta visible, volver a calcularla con el nuevo perfil.
-      const origen  = document.getElementById('lugarRuta')?.value?.trim()  || '';
-      const destino = document.getElementById('destinoRuta')?.value?.trim() || '';
-      if (origen && destino && rutaRoutingControl) {
-        renderMapaRuta(origen, destino);
-      }
     }
 
     // Clasificacion de trafico estimado segun velocidad promedio de la ruta.
@@ -1606,9 +2136,89 @@
         });
 
         aplicarVisualizacionMapaRuta();
+        // Habilita captura de clic para modo manual A/B.
+        rutaMapInstance.on('click', manejarClickMapaRuta);
       }
 
+      actualizarBotonModoPuntosRuta();
+
       return rutaMapInstance;
+    }
+
+    // Traza ruta cuando ya se dispone de coordenadas A/B (modo manual).
+    function renderMapaRutaDesdeCoordenadas(origenLL, destinoLL, origenLabel = 'Origen', destinoLabel = 'Destino') {
+      const hint = document.getElementById('rutaMapHint');
+      const openLink = document.getElementById('abrirMapsRuta');
+      if (!origenLL || !destinoLL) return;
+
+      if (openLink) {
+        openLink.href = construirEnlaceGoogleMaps(
+          `${origenLL.lat},${origenLL.lng}`,
+          `${destinoLL.lat},${destinoLL.lng}`
+        );
+      }
+
+      const mapa = initOrGetMapaRuta();
+      if (!mapa) return;
+
+      mapa.invalidateSize();
+      actualizarOverlayCarreterasRuta();
+      actualizarOverlayLugaresRuta();
+
+      if (rutaRoutingControl) {
+        mapa.removeControl(rutaRoutingControl);
+        rutaRoutingControl = null;
+      }
+
+      rutaRoutingControl = L.Routing.control({
+        waypoints: [origenLL, destinoLL],
+        router: L.Routing.osrmv1({
+          serviceUrl: 'https://router.project-osrm.org/route/v1',
+          profile: 'driving',
+          language: 'es',
+          routingOptions: { alternatives: 3 }
+        }),
+        // En modo manual conservamos los marcadores puestos con clic.
+        createMarker: function() { return null; },
+        show: true,
+        collapsible: true,
+        addWaypoints: false,
+        routeWhileDragging: false,
+        draggableWaypoints: false,
+        fitSelectedRoutes: true,
+        showAlternatives: true,
+        lineOptions: {
+          styles: [
+            { color: '#ffffff', weight: 12, opacity: 1.0 },
+            { color: '#1a73e8', weight: 7, opacity: 1.0 }
+          ],
+          missingRouteStyles: [{ color: '#aaa', weight: 4, opacity: 0.5 }]
+        },
+        altLineOptions: {
+          styles: [
+            { color: '#ffffff', weight: 9, opacity: 0.85 },
+            { color: '#e6941a', weight: 5, opacity: 0.85, dashArray: '1,10' }
+          ]
+        }
+      }).addTo(mapa);
+
+      rutaRoutingControl.on('routesfound', function(e) {
+        rutasCalculadas = Array.isArray(e.routes) ? e.routes : [];
+        const ruta = e.routes?.[0];
+        if (!ruta || !hint) return;
+        const km = (ruta.summary.totalDistance / 1000).toFixed(1);
+        const mins = Math.round(ruta.summary.totalTime / 60);
+        const hrs = Math.floor(mins / 60);
+        const rem = mins % 60;
+        const tiempo = hrs > 0 ? `${hrs}h ${rem}min` : `${mins} min`;
+        const traf = obtenerNivelTraficoEstimado(ruta.summary);
+        aplicarEstadoTraficoHint(traf.clase);
+        hint.innerHTML = `✅ Ruta por puntos: <strong>${origenLabel}</strong> → <strong>${destinoLabel}</strong> &nbsp;|&nbsp; <strong>${km} km</strong> &nbsp;|&nbsp; <strong>${tiempo}</strong> &nbsp;|&nbsp; Trafico estimado: <span class="ruta-chip ${traf.clase}">${traf.nivel}</span>`;
+      });
+
+      rutaRoutingControl.on('routingerror', function() {
+        if (hint) hint.textContent = '⚠️ No se pudo calcular la ruta entre Punto A y Punto B.';
+      });
     }
     // Geocodifica origen y destino, luego traza la mejor ruta con OSRM.
     async function renderMapaRuta(origen, destino) {
@@ -1637,6 +2247,7 @@
 
         mapa.invalidateSize();
         actualizarOverlayCarreterasRuta();
+        actualizarOverlayLugaresRuta();
 
         if (rutaRoutingControl) {
           mapa.removeControl(rutaRoutingControl);
@@ -1657,9 +2268,6 @@
           return;
         }
 
-        // Leer perfil de transporte activo: driving / cycling / walking.
-        const perfilActivo = document.querySelector('.ruta-perfil-btn.active')?.dataset?.perfil || 'driving';
-
         rutaRoutingControl = L.Routing.control({
           waypoints: [
             L.latLng(oCoords.lat, oCoords.lng),
@@ -1667,7 +2275,7 @@
           ],
           router: L.Routing.osrmv1({
             serviceUrl: 'https://router.project-osrm.org/route/v1',
-            profile: perfilActivo,
+            profile: 'driving',
             language: 'es',
             // Solicitar hasta 3 rutas alternativas al servidor OSRM.
             routingOptions: { alternatives: 3 }
@@ -1838,6 +2446,7 @@
         }
 
         actualizarResumenRutaPorPedido();
+        inicializarAutocompleteRutas();
       }).catch(() => {
         // Si falla, la pantalla sigue operativa con entrada manual.
       });
